@@ -1,21 +1,18 @@
-# validly
+# Validly
 
-### **Validly**
-
-A powerful and extensible data validation and comparison tool designed for developers and testers. Easily integrate into your automation projects to ensure JSON data integrity.
+A powerful and extensible data validation and comparison tool designed for developers and testers. Easily integrate it into your automation projects to ensure JSON data integrity.
 
 ### **Features**
 
-  * **Deep, Recursive Comparison**: Validates nested JSON structures seamlessly.
-  * **Flexible Options**: Control validation with a rich set of options for every use case.
-  * **Order-Agnostic Lists**: Intelligently compares lists of objects regardless of their order.
-  * **Domain-Specific Validations**: Built-in checks for common data formats like UUIDs, PAN, and Aadhaar numbers.
-  * **Referencing Capabilities**: Use a dynamic template to compare a field's value to another field in the `actual` JSON.
-  * **Custom Validators**: Extend validation logic with your own Python methods from an external file.
-  * **Numeric Comparisons**: Validate fields with operators like greater than (`gt`), less than (`lt`), and more.
-  * **Wildcard Matching**: Use placeholders to ignore values that are dynamic or unpredictable.
+* **Deep, Recursive Comparison**: Validates nested JSON structures seamlessly.
+* **Flexible Options**: Control validation with a rich set of options for every use case.
+* **List Validation Modes**: Choose between order-agnostic and symmetric list comparisons.
+* **Domain-Specific Validations**: Built-in checks for common data formats like UUIDs, PAN, and Aadhaar numbers.
+* **Referencing Capabilities**: Use a dynamic template to compare a field's value to another field in the `actual` JSON.
+* **Numeric Comparisons**: Validate fields with operators like greater than (`gt`), less than (`lt`), and more.
+* **Wildcard Matching**: Use placeholders to ignore values that are dynamic or unpredictable.
 
------
+---
 
 ### **Installation**
 
@@ -23,13 +20,30 @@ A powerful and extensible data validation and comparison tool designed for devel
 
 ```sh
 pip install Validly
-```
+````
 
 -----
 
-### **Basic Usage**
+### **Usage and Output**
 
-Use `json_difference` to compare two JSON objects. It returns a list of failure messages if differences are found.
+The core function, `json_difference`, returns a structured dictionary containing the validation result and a detailed list of errors, if any. This format is ideal for programmatic analysis and reporting in your automation framework.
+
+**Return Format:**
+
+The function returns a dictionary with the following keys:
+
+  * `result`: A boolean (`True` for success, `False` for failure).
+  * `errors`: A list of dictionaries, where each dictionary represents a single validation failure.
+
+**Error Dictionary Format:**
+
+Each error in the `errors` list contains these keys:
+
+  * `field`: The name of the field where the error occurred.
+  * `jsonpath`: The full path to the field (e.g., `"user.age"`).
+  * `message`: A human-readable description of the validation failure.
+
+**Example:**
 
 ```python
 from Validly import json_difference
@@ -37,117 +51,156 @@ from Validly import json_difference
 expected = {"id": 100, "name": "test"}
 actual = {"id": 101, "name": "test"}
 
-differences = json_difference(expected, actual)
+result = json_difference(expected, actual)
 
-# Output:
-# ❌ Value mismatch at id: expected '100', got '101'
+# The result dictionary will be:
+# {
+#   'result': False,
+#   'errors': [
+#     {
+#       'field': 'id',
+#       'jsonpath': 'id',
+#       'message': "Value mismatch: expected '100', got '101'"
+#     }
+#   ]
+# }
 ```
 
 -----
 
-### **Advanced Usage with Options**
+### **List Validation Modes**
 
-Pass a dictionary of options to customize the validation behavior.
+`Validly` offers two ways to compare lists, controlled by the `list_validation_type` option.
+
+#### **1. Unordered (Default)**
+
+This mode is designed for lists of objects where the order doesn't matter. It intelligently matches objects based on a set of common keys such as `"name"`, `"id"`, and `"qId"`.
+
+**How it works:**
+The function creates a map of objects from both lists and then compares them based on their key. It reports missing and extra items but ignores changes in their order.
+
+**Example:**
+The comparison will pass despite the different order in the `actual` list.
 
 ```python
 from Validly import json_difference
 
-# --- Sample Data ---
-expected_data = {
-    "user_id": "{ACTUAL_VALUE:user.id}",
-    "user": {
-        "id": 1234,
-        "name": "Jane Doe",
-        "age": 30
-    },
-    "uuid_field": "{ACTUAL_VALUE:user.uuid}",
-    "pan_field": "{ACTUAL_VALUE:user.pan}",
-    "login_count": 5
-}
-actual_data = {
-    "user_id": 1234,
-    "user": {
-        "id": 1234,
-        "name": "John Doe",
-        "age": 32,
-        "email": "test@example.com",
-        "uuid": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
-        "pan": "ABCDE1234F"
-    },
-    "uuid_field": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
-    "pan_field": "ABCDE1234F",
-    "login_count": 6
-}
+expected_list = [
+    {"id": 1, "value": "a"},
+    {"id": 2, "value": "b"}
+]
 
-# --- Validation Options ---
-# This is a sample `custom_validators.py` file with your validation logic.
-# You would need to create this file in your project.
-#
-# custom_validators.py
-# import re
-# from typing import Any, Tuple
-# def validate_email_format(expected: Any, actual: Any) -> Tuple[bool, str]:
-#     if not isinstance(actual, str): return False, "Value is not a string."
-#     email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
-#     if email_pattern.match(actual): return True, ""
-#     return False, "Value is not a valid email format."
+actual_list = [
+    {"id": 2, "value": "b"},
+    {"id": 1, "value": "a"}
+]
 
-options = {
-    "wildcard_keys": ["user.name"],
-    "numeric_validations": {
-        "user.age": {"operator": "gt", "value": 30},
-        "login_count": {"operator": "le", "value": 5}
-    },
-    "is_uuid_keys": ["user.uuid", "uuid_field"],
-    "is_pan_keys": ["user.pan", "pan_field"],
-    "is_aadhar_keys": ["user.pan", "pan_field"],
-    "custom_validators": {"user.email": "validate_email_format"},
-    "custom_validator_path": "custom_validators.py",
-    "skip_keys": ["user_id"]
-}
+# The default behavior is 'unordered', so no option is needed here.
+results = json_difference(expected_list, actual_list)
 
-# --- Running the comparison ---
-differences = json_difference(expected_data, actual_data, options=options)
+# { 'result': True, 'errors': [] }
+```
 
-# Expected differences:
-# ❌ Value mismatch at user.name: expected 'Jane Doe', got 'John Doe'
-# ❌ Numeric validation failed at login_count: Value is not less than or equal to 5
-# ❌ Extra key in actual: user.email
+#### **2. Symmetric**
+
+This mode is for lists where the order of items is critical. It performs a direct, index-based comparison.
+
+**How to use:**
+Set `list_validation_type` to `"symmetric"` in your options.
+
+```python
+options = { "list_validation_type": "symmetric" }
+
+expected_list = [
+    {"id": 1, "value": "a"},
+    {"id": 2, "value": "b"}
+]
+
+actual_list = [
+    {"id": 2, "value": "b"},
+    {"id": 1, "value": "a"}
+]
+
+results = json_difference(expected_list, actual_list, options=options)
+
+# Expected result (failure due to different order):
+# {
+#   'result': False,
+#   'errors': [
+#     {
+#       'field': '0',
+#       'jsonpath': '[0]',
+#       'message': "Value mismatch: expected {'id': 1, 'value': 'a'}, got {'id': 2, 'value': 'b'}"
+#     },
+#     {
+#       'field': '1',
+#       'jsonpath': '[1]',
+#       'message': "Value mismatch: expected {'id': 2, 'value': 'b'}, got {'id': 1, 'value': 'a'}"
+#     }
+#   ]
+# }
 ```
 
 -----
 
-### **Custom Validators**
+### **CLI Usage**
 
-Create a Python file (e.g., `custom_validators.py`) with your custom logic. Your validator methods should accept `expected` and `actual` values and return a `(bool, str)` tuple.
+The `Validly` CLI allows you to perform validations from the command line without writing a Python script, making it ideal for CI/CD pipelines and automated testing.
 
-```python
-# custom_validators.py
-import re
-from typing import Any, Tuple
+#### **Basic Command**
 
-def validate_email_format(expected: Any, actual: Any) -> Tuple[bool, str]:
-    # ... (code as provided) ...
-```
+The core command to run `Validly` is:
 
-Then, configure the validator in your `options` dictionary:
+`python -m Validly <expected_json_file> <actual_json_file>`
 
-```python
-options = {
-    "custom_validators": {"user.email": "validate_email_format"},
-    "custom_validator_path": "custom_validators.py"
-}
-```
-
------
-
-### **Command Line Usage**
-
-Compare two files directly from your terminal:
+**Example of a successful comparison:**
 
 ```sh
-python -m Validly expected.json actual.json
+$ python -m Validly expected.json actual.json
+
+Comparing 'expected.json' with 'actual.json'...
+
+✅ Validation passed with no differences.
 ```
+
+**Example of a failed comparison:**
+
+```sh
+$ python -m Validly expected.json actual.json
+
+Comparing 'expected.json' with 'actual.json'...
+
+❌ Failures found:
+- Field: id, JSON Path: id, Message: Value mismatch: expected '100', got '101'
+```
+
+#### **Advanced Usage with Options**
+
+To pass advanced options via the CLI, provide a third JSON file containing the validation rules. This file's structure directly mirrors the options dictionary used in the Python API.
+
+**1. Create an `options.json` file**
+
+This file holds all your validation rules.
+
+```json
+{
+  "list_validation_type": "symmetric",
+  "wildcard_keys": ["user.name"],
+  "numeric_validations": {
+    "user.age": {"operator": "gt", "value": 30},
+    "login_count": {"operator": "le", "value": 5}
+  },
+  "is_uuid_keys": ["user.uuid"],
+  "is_pan_keys": ["user.pan"],
+  "skip_keys": ["user_id", "id"]
+}
+```
+
+**2. Run the command with the options file**
+
+The CLI will automatically detect and parse the third argument as the options file.
+
+`python -m Validly <expected_json_file> <actual_json_file> <options_json_file>`
 
 -----
 

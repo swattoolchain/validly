@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 import re
 
 # ==============================================================================
-# Custom Validator and Module Loading (Secure Alternative to eval)
+# Custom Validator and Module Loading
 # ==============================================================================
 def _load_custom_validators(file_path: str) -> Dict[str, Callable]:
     """
@@ -171,13 +171,18 @@ def json_difference(
                     continue
                 json_difference(expected_dict[key], actual_dict[key], key_path, errors, options, root_actual)
 
-    def compare_lists(expected_list: List[Any], actual_list: List[Any], current_path: str):
+    def compare_lists_symmetric(expected_list: List[Any], actual_list: List[Any], current_path: str):
+        field_name = get_leaf_key(current_path)
+        if len(expected_list) != len(actual_list):
+            _add_error(field_name, current_path, f"List length mismatch: expected {len(expected_list)}, got {len(actual_list)}")
+        min_len = min(len(expected_list), len(actual_list));
+        for i in range(min_len):
+            json_difference(expected_list[i], actual_list[i], f"{current_path}[{i}]", errors, options, root_actual)
+
+    def compare_lists_unordered(expected_list: List[Any], actual_list: List[Any], current_path: str):
         field_name = get_leaf_key(current_path)
         if not all(isinstance(x, dict) for x in expected_list + actual_list):
-            if len(expected_list) != len(actual_list): _add_error(field_name, current_path, f"List length mismatch: expected {len(expected_list)}, got {len(actual_list)}")
-            min_len = min(len(expected_list), len(actual_list));
-            for i in range(min_len): json_difference(expected_list[i], actual_list[i], f"{current_path}[{i}]", errors, options, root_actual)
-            return
+            return compare_lists_symmetric(expected_list, actual_list, current_path)
         matching_keys = ["name", "id", "qId", "chanUid", "hubId"]
         match_key = None
         for key in matching_keys:
@@ -200,7 +205,11 @@ def json_difference(
     if isinstance(expected, dict) and isinstance(actual, dict):
         compare_dicts(expected, actual, path)
     elif isinstance(expected, list) and isinstance(actual, list):
-        compare_lists(expected, actual, path)
+        list_type = options.get("list_validation_type", "unordered")
+        if list_type == "symmetric":
+            compare_lists_symmetric(expected, actual, path)
+        else:
+            compare_lists_unordered(expected, actual, path)
     elif not (isinstance(expected, (dict, list)) or isinstance(actual, (dict, list))):
         field_name = get_leaf_key(path)
         resolved, resolved_expected = _resolve_reference(expected)
