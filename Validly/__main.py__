@@ -1,0 +1,37 @@
+import sys
+import json
+from Validly.validator import json_difference
+
+def main():
+    if len(sys.argv) != 3:
+        print("Usage: python -m Validly <expected_json_file> <actual_json_file>")
+        sys.exit(1)
+    
+    expected_file = sys.argv[1]
+    actual_file = sys.argv[2]
+    
+    try:
+        with open(expected_file, 'r') as f:
+            expected_data = json.load(f)
+        with open(actual_file, 'r') as f:
+            actual_data = json.load(f)
+
+        print(f"Comparing '{expected_file}' with '{actual_file}'...")
+        differences = json_difference(expected_data, actual_data)
+
+        if differences:
+            print("\n❌ Failures found:")
+            for diff in differences:
+                print(f"- {diff}")
+        else:
+            print("\n✅ Validation passed with no differences.")
+
+    except FileNotFoundError as e:
+        print(f"❌ ERROR: File not found: {e}")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"❌ ERROR: Invalid JSON in file: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
