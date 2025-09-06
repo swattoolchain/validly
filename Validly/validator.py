@@ -4,9 +4,10 @@ import sys
 import importlib.util
 from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 import re
+from pathlib import Path
 
 # ==============================================================================
-# Custom Validator and Module Loading (Secure Alternative to eval)
+# Custom Validator and Module Loading
 # ==============================================================================
 def _load_custom_validators(file_path: str) -> Dict[str, Callable]:
     """
@@ -171,13 +172,18 @@ def json_difference(
                     continue
                 json_difference(expected_dict[key], actual_dict[key], key_path, errors, options, root_actual)
 
-    def compare_lists(expected_list: List[Any], actual_list: List[Any], current_path: str):
+    def compare_lists_symmetric(expected_list: List[Any], actual_list: List[Any], current_path: str):
+        field_name = get_leaf_key(current_path)
+        if len(expected_list) != len(actual_list):
+            _add_error(field_name, current_path, f"List length mismatch: expected {len(expected_list)}, got {len(actual_list)}")
+        min_len = min(len(expected_list), len(actual_list));
+        for i in range(min_len):
+            json_difference(expected_list[i], actual_list[i], f"{current_path}[{i}]", errors, options, root_actual)
+
+    def compare_lists_unordered(expected_list: List[Any], actual_list: List[Any], current_path: str):
         field_name = get_leaf_key(current_path)
         if not all(isinstance(x, dict) for x in expected_list + actual_list):
-            if len(expected_list) != len(actual_list): _add_error(field_name, current_path, f"List length mismatch: expected {len(expected_list)}, got {len(actual_list)}")
-            min_len = min(len(expected_list), len(actual_list));
-            for i in range(min_len): json_difference(expected_list[i], actual_list[i], f"{current_path}[{i}]", errors, options, root_actual)
-            return
+            return compare_lists_symmetric(expected_list, actual_list, current_path)
         matching_keys = ["name", "id", "qId", "chanUid", "hubId"]
         match_key = None
         for key in matching_keys:
@@ -200,7 +206,11 @@ def json_difference(
     if isinstance(expected, dict) and isinstance(actual, dict):
         compare_dicts(expected, actual, path)
     elif isinstance(expected, list) and isinstance(actual, list):
-        compare_lists(expected, actual, path)
+        list_type = options.get("list_validation_type", "unordered")
+        if list_type == "symmetric":
+            compare_lists_symmetric(expected, actual, path)
+        else:
+            compare_lists_unordered(expected, actual, path)
     elif not (isinstance(expected, (dict, list)) or isinstance(actual, (dict, list))):
         field_name = get_leaf_key(path)
         resolved, resolved_expected = _resolve_reference(expected)
@@ -235,3 +245,429 @@ def json_difference(
         elif resolved_expected != actual: _add_error(field_name, path, f"Value mismatch: expected '{resolved_expected}', got '{actual}'")
             
     return {"result": len(errors) == 0, "errors": errors}
+
+
+# ==============================================================================
+# JSON Filtering Functions
+# ==============================================================================
+
+def jsonfilter(data: Any, options: Dict[str, Any]) -> Any:
+    """
+    Filters a JSON object based on specified options.
+    
+    Args:
+        data (Any): The JSON data to filter (as a Python dict/list).
+        options (Dict[str, Any]): Filtering options with the following possible keys:
+            - jsonpath (List[str]): List of JSON paths to filter (supports wildcards).
+            - regex (str): Filter keys containing this text pattern.
+            - filter_type (str): Either "include" (default) or "exclude" to specify whether to include or exclude the matched paths.
+    
+    Returns:
+        Any: The filtered JSON data.
+    """
+    if not options:
+        return data
+    
+    # Set default filter_type to "include" if not specified
+    if "filter_type" not in options:
+        options["filter_type"] = "include"
+    
+    # Validate filter_type
+    if options["filter_type"] not in ["include", "exclude"]:
+        raise ValueError("filter_type must be either 'include' or 'exclude'")
+    
+    # Handle different data types
+    if isinstance(data, dict):
+        return _filter_dict(data, options, "")
+    elif isinstance(data, list):
+        return _filter_list(data, options, "")
+    else:
+        # Primitive types are returned as is
+        return data
+
+
+def jsonfilter_file(file_path: str, options: Dict[str, Any]) -> Any:
+    """
+    Reads a JSON file and filters its content based on specified options.
+    
+    Args:
+        file_path (str): Path to the JSON file.
+        options (Dict[str, Any]): Filtering options with the following possible keys:
+            - jsonpath (List[str]): List of JSON paths to include (supports wildcards).
+            - regex (str): Include keys containing this text pattern.
+    
+    Returns:
+        Any: The filtered JSON data.
+        
+    Raises:
+        FileNotFoundError: If the file doesn't exist.
+        json.JSONDecodeError: If the file contains invalid JSON.
+    """
+    file_path = Path(file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"JSON file not found at: {file_path}")
+    
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+    
+    return jsonfilter(data, options)
+
+
+def _filter_dict(data: Dict[str, Any], options: Dict[str, Any], current_path: str) -> Dict[str, Any]:
+    """
+    Helper function to filter dictionary objects.
+    """
+    result = {}
+    jsonpaths = options.get("jsonpath", [])
+    regex_pattern = options.get("regex")
+    filter_type = options.get("filter_type", "include")
+    
+    # If no filtering options provided, return the data as is
+    if not jsonpaths and not regex_pattern:
+        return data
+    
+    for key, value in data.items():
+        # Build the current JSON path
+        key_path = f"{current_path}.{key}" if current_path else key
+        
+        # Check if this key or its children should be included/excluded
+        path_matched = False
+        
+        # Check jsonpath patterns
+        if jsonpaths:
+            # Direct match with the current path
+            if key_path in jsonpaths:
+                path_matched = True
+            
+            # Check for wildcard matches
+            for path in jsonpaths:
+                # Exact path match
+                if path == key_path:
+                    path_matched = True
+                    break
+                
+                # Wildcard match (e.g., "user.*" matches "user.name", "user.age", etc.)
+                if path.endswith(".*"):
+                    base_path = path[:-2]  # Remove the ".*"
+                    if key_path == base_path or key_path.startswith(f"{base_path}."):
+                        path_matched = True
+                        break
+                
+                # Parent path match (include all children of a specified path)
+                if path == current_path or (not current_path and path == ""):
+                    path_matched = True
+                    break
+                
+                # Include if this key is part of a path that should be included
+                if key_path.startswith(f"{path}.") or path.startswith(f"{key_path}."):
+                    path_matched = True
+                    break
+        
+        # Check regex pattern
+        if regex_pattern and re.search(regex_pattern, key):
+            path_matched = True
+        
+        # Determine whether to include this key based on filter_type
+        include_key = (path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude")
+        
+        if include_key:
+            # For nested structures, recursively filter
+            if isinstance(value, dict):
+                filtered_dict = _filter_dict(value, options, key_path)
+                if filtered_dict:  # Only add non-empty dictionaries
+                    result[key] = filtered_dict
+            elif isinstance(value, list):
+                filtered_list = _filter_list(value, options, key_path)
+                if filtered_list:  # Only add non-empty lists
+                    result[key] = filtered_list
+            else:
+                result[key] = value
+        elif isinstance(value, dict):
+            # Even if this key isn't included, check if any of its children should be
+            filtered_dict = _filter_dict(value, options, key_path)
+            if filtered_dict:  # Only add non-empty dictionaries
+                result[key] = filtered_dict
+        elif isinstance(value, list):
+            # Even if this key isn't included, check if any of its children should be
+            filtered_list = _filter_list(value, options, key_path)
+            if filtered_list:  # Only add non-empty lists
+                result[key] = filtered_list
+    
+    return result
+
+
+def _filter_list(data: List[Any], options: Dict[str, Any], current_path: str) -> List[Any]:
+    """
+    Helper function to filter list objects.
+    """
+    # If no filtering options provided, return the list as is
+    jsonpaths = options.get("jsonpath", [])
+    regex_pattern = options.get("regex")
+    filter_type = options.get("filter_type", "include")
+    
+    if not jsonpaths and not regex_pattern:
+        return data
+    
+    # Check if the entire list path is in the jsonpaths
+    path_matched = current_path in jsonpaths
+    
+    # Check if parent path with wildcard includes this list
+    if not path_matched:
+        for path in jsonpaths:
+            if path.endswith(".*"):
+                base_path = path[:-2]  # Remove the ".*"
+                if current_path == base_path or current_path.startswith(f"{base_path}."):
+                    path_matched = True
+                    break
+    
+    # If the entire list matches and we're in include mode, or it doesn't match and we're in exclude mode, return the whole list
+    if (path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude"):
+        return data
+    
+    result = []
+    
+    for i, item in enumerate(data):
+        item_path = f"{current_path}[{i}]"
+        
+        if isinstance(item, dict):
+            filtered_item = _filter_dict(item, options, item_path)
+            if filtered_item:  # Only add non-empty dictionaries
+                result.append(filtered_item)
+        elif isinstance(item, list):
+            filtered_item = _filter_list(item, options, item_path)
+            if filtered_item:  # Only add non-empty lists
+                result.append(filtered_item)
+        else:
+            # For primitive types, check if the parent path is included
+            path_matched = False
+            
+            for path in jsonpaths:
+                if path == current_path or current_path.startswith(f"{path}."):
+                    path_matched = True
+                    break
+            
+            # Check regex pattern for the index (as a string)
+            if regex_pattern and re.search(regex_pattern, str(i)):
+                path_matched = True
+            
+            # Determine whether to include this item based on filter_type
+            include_item = (path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude")
+            
+            if include_item:
+                result.append(item)
+    
+    return result
+
+
+# ==============================================================================
+# JSON Transform Functions
+# ==============================================================================
+
+def json_transform(data: Any, options: Dict[str, Any]) -> Any:
+    """
+    Transforms a JSON object based on specified options.
+    
+    Args:
+        data (Any): The JSON data to transform (as a Python dict/list).
+        options (Dict[str, Any]): Transformation options with the following possible keys:
+            - transforms (Dict[str, Dict]): A dictionary mapping JSON paths to transformation options.
+                Each transformation option can have:
+                - method (str): The name of the transformation method to apply.
+                - args (Dict): Additional arguments for the transformation method.
+            - custom_transform_path (str): Path to a Python file with custom transformation functions.
+            - add_fields (Dict[str, Dict]): A dictionary mapping new field paths to their values and parent paths.
+                Each add_field option should have:
+                - value (Any): The value to set for the new field.
+                - parent (str): The parent path where the new field should be added.
+    
+    Returns:
+        Any: The transformed JSON data.
+    """
+    if not options:
+        return data
+    
+    # Load custom transformers if specified
+    if options.get("custom_transform_path") and not hasattr(json_transform, "_transformers"):
+        try:
+            json_transform._transformers = _load_custom_transformers(options["custom_transform_path"])
+        except Exception as e:
+            raise ValueError(f"Failed to load custom transformers: {e}")
+    
+    # Handle different data types
+    if isinstance(data, dict):
+        return _transform_dict(data, options, "", data)
+    elif isinstance(data, list):
+        return _transform_list(data, options, "", data)
+    else:
+        # Primitive types are returned as is unless specifically targeted
+        return _apply_transform(data, "", options, data)
+
+
+def json_transform_file(file_path: str, options: Dict[str, Any]) -> Any:
+    """
+    Reads a JSON file and transforms its content based on specified options.
+    
+    Args:
+        file_path (str): Path to the JSON file.
+        options (Dict[str, Any]): Transformation options with the following possible keys:
+            - transforms (Dict[str, Dict]): A dictionary mapping JSON paths to transformation options.
+            - custom_transform_path (str): Path to a Python file with custom transformation functions.
+            - add_fields (Dict[str, Dict]): A dictionary mapping new field paths to their values and parent paths.
+    
+    Returns:
+        Any: The transformed JSON data.
+        
+    Raises:
+        FileNotFoundError: If the file doesn't exist.
+        json.JSONDecodeError: If the file contains invalid JSON.
+    """
+    file_path = Path(file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"JSON file not found at: {file_path}")
+    
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+    
+    return json_transform(data, options)
+
+
+def _load_custom_transformers(file_path: str) -> Dict[str, Callable]:
+    """
+    Safely loads a Python module from a given file path and returns its
+    callable methods for transformations.
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Custom transformer file not found at: {file_path}")
+
+    spec = importlib.util.spec_from_file_location("custom_transformers_module", file_path)
+    if spec is None:
+        raise ImportError(f"Could not load module specification from {file_path}")
+        
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["custom_transformers_module"] = module
+    spec.loader.exec_module(module)
+    
+    transformers = {
+        name: func for name, func in module.__dict__.items() if callable(func)
+    }
+    return transformers
+
+
+def _transform_dict(data: Dict[str, Any], options: Dict[str, Any], current_path: str, root_data: Any) -> Dict[str, Any]:
+    """
+    Helper function to transform dictionary objects.
+    """
+    result = {}
+    transforms = options.get("transforms", {})
+    add_fields = options.get("add_fields", {})
+    
+    # First, apply transformations to existing fields
+    for key, value in data.items():
+        # Build the current JSON path
+        key_path = f"{current_path}.{key}" if current_path else key
+        
+        # Apply transformations to this field if specified
+        transformed_value = _apply_transform(value, key_path, options, root_data)
+        
+        # For nested structures, recursively transform
+        if isinstance(transformed_value, dict):
+            result[key] = _transform_dict(transformed_value, options, key_path, root_data)
+        elif isinstance(transformed_value, list):
+            result[key] = _transform_list(transformed_value, options, key_path, root_data)
+        else:
+            result[key] = transformed_value
+    
+    # Then, add new fields if this is the parent path for any add_fields
+    for field_path, field_info in add_fields.items():
+        parent_path = field_info.get("parent", "")
+        if parent_path == current_path:
+            field_name = field_path.split(".")[-1] if "." in field_path else field_path
+            result[field_name] = field_info.get("value")
+    
+    return result
+
+
+def _transform_list(data: List[Any], options: Dict[str, Any], current_path: str, root_data: Any) -> List[Any]:
+    """
+    Helper function to transform list objects.
+    """
+    result = []
+    
+    for i, item in enumerate(data):
+        item_path = f"{current_path}[{i}]"
+        
+        # Apply transformations to this item if specified
+        transformed_item = _apply_transform(item, item_path, options, root_data)
+        
+        if isinstance(transformed_item, dict):
+            result.append(_transform_dict(transformed_item, options, item_path, root_data))
+        elif isinstance(transformed_item, list):
+            result.append(_transform_list(transformed_item, options, item_path, root_data))
+        else:
+            result.append(transformed_item)
+    
+    return result
+
+
+def _apply_transform(value: Any, path: str, options: Dict[str, Any], root_data: Any) -> Any:
+    """
+    Apply transformation to a value if specified in the options.
+    """
+    transforms = options.get("transforms", {})
+    
+    # Check if there's a transformation for this path
+    if path in transforms:
+        transform_info = transforms[path]
+        method_name = transform_info.get("method")
+        args = transform_info.get("args", {})
+        
+        # Built-in transformers
+        if method_name == "to_string":
+            return str(value)
+        elif method_name == "to_int":
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return 0
+        elif method_name == "to_float":
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return 0.0
+        elif method_name == "to_bool":
+            return bool(value)
+        elif method_name == "format":
+            format_str = args.get("format", "{}")
+            try:
+                return format_str.format(value)
+            except Exception:
+                return value
+        elif method_name == "default":
+            default_value = args.get("value")
+            return default_value if value is None else value
+        elif method_name == "multiply":
+            factor = args.get("factor", 1)
+            try:
+                return value * factor
+            except (TypeError, ValueError):
+                return value
+        elif method_name == "add":
+            amount = args.get("amount", 0)
+            try:
+                return value + amount
+            except (TypeError, ValueError):
+                return value
+        elif method_name == "replace":
+            old = args.get("old", "")
+            new = args.get("new", "")
+            if isinstance(value, str):
+                return value.replace(old, new)
+            return value
+        # Custom transformers
+        elif hasattr(json_transform, "_transformers") and method_name in json_transform._transformers:
+            try:
+                return json_transform._transformers[method_name](value, args, root_data)
+            except Exception as e:
+                raise ValueError(f"Error applying custom transformer '{method_name}': {e}")
+    
+    return value
