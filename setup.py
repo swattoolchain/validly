@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='Validly',
-    version='1.0.6',
+    version='1.0.9',
     author='Dinesh RVL',
     author_email='swat.github@gmail.com',
     description='A powerful and extensible data validation and comparison tool for developers and testers.',
