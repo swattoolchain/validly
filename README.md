@@ -23,6 +23,17 @@ A powerful and extensible data validation and comparison tool designed for devel
     - [Adding New Fields](#adding-new-fields)
     - [Custom Transformers](#custom-transformers-1)
     - [Transforming from Files](#transforming-from-files)
+  - [4. JSON Validation (`json_validate`)](#4-json-validation)
+    - [Basic Validation](#basic-validation)
+    - [Type Validation](#type-validation)
+    - [Format Validation](#format-validation)
+    - [Required Fields Validation](#required-fields-validation)
+    - [Custom Validation](#custom-validation)
+  - [5. OpenAPI Validation (`validate_openapi`)](#5-openapi-validation)
+    - [Basic OpenAPI Validation](#basic-openapi-validation)
+    - [Validating Request/Response](#validating-requestresponse)
+    - [OpenAPI Schema Components](#openapi-schema-components)
+    - [Custom OpenAPI Validation](#custom-openapi-validation)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -38,6 +49,8 @@ A powerful and extensible data validation and comparison tool designed for devel
   * **Wildcard Matching**: Use placeholders to ignore values that are dynamic or unpredictable.
   * **JSON Filtering**: Filter JSON data based on JSON paths and regex patterns with include/exclude options.
   * **JSON Transformation**: Transform JSON data with built-in and custom transformation functions.
+  * **API Contract Validation**: Validate JSON data against API contracts with type checking and format validation.
+  * **OpenAPI/Swagger Validation**: Validate JSON data against OpenAPI/Swagger specifications.
 
 ## Installation
 
@@ -717,6 +730,330 @@ transformed_data = json_transform_file("data.json", options)
 
 # Process the transformed data
 print(transformed_data)
+```
+
+### 4. JSON Validation
+
+Validly provides a powerful way to validate JSON data against API contracts using the `json_validate` function.
+
+#### Basic Validation
+
+Validate JSON data against a contract schema:
+
+```python
+from Validly import json_validate
+
+# Sample data
+data = {
+    "user": {
+        "id": "1234",
+        "name": "John Doe",
+        "age": 30,
+        "email": "john@example.com"
+    },
+    "orders": [
+        {"id": 101, "product": "Laptop", "price": 999.99}
+    ]
+}
+
+# Contract schema
+contract = {
+    "user": {
+        "id": "",
+        "name": "",
+        "age": 0,
+        "email": ""
+    },
+    "orders": [
+        {"id": 0, "product": "", "price": 0.0}
+    ]
+}
+
+# Validate data against contract
+result = json_validate(data, contract)
+
+# Result:
+# {
+#     "result": True,
+#     "errors": []
+# }
+```
+
+#### Type Validation
+
+Validate that fields have the correct data types:
+
+```python
+options = {
+    "type_validations": {
+        "user.id": "string",
+        "user.age": "number",
+        "user.active": "boolean",
+        "orders": "array"
+    }
+}
+
+result = json_validate(data, contract, options)
+```
+
+Supported types include: `string`, `number`, `boolean`, `array`, `object`, and `any`.
+
+#### Format Validation
+
+Validate that fields match specific formats:
+
+```python
+options = {
+    "is_uuid_keys": ["user.uuid"],
+    "is_pan_keys": ["user.pan"],
+    "is_aadhar_keys": ["user.aadhar"],
+    "regex_keys": {
+        "user.email": r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    }
+}
+
+result = json_validate(data, contract, options)
+```
+
+#### Required Fields Validation
+
+Specify fields that must be present in the data:
+
+```python
+options = {
+    "required_keys": [
+        "user.id",
+        "user.name",
+        "user.email",
+        "orders"
+    ]
+}
+
+result = json_validate(data, contract, options)
+```
+
+#### Custom Validation
+
+Use custom validators for complex validation logic:
+
+```python
+# First, create a custom validator file
+with open('custom_validators.py', 'w') as f:
+    f.write(r"""
+def validate_email(expected, actual):
+    import re
+    if not isinstance(actual, str):
+        return False, "Value is not a string"
+    
+    email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+    if email_pattern.match(actual):
+        return True, ""
+    
+    return False, f"'{actual}' is not a valid email format"
+""")
+
+# Then use the custom validator
+options = {
+    "custom_validators": {
+        "user.email": "validate_email"
+    },
+    "custom_validator_path": "custom_validators.py"
+}
+
+result = json_validate(data, contract, options)
+```
+
+#### Strict Mode
+
+Enforce that the data doesn't contain any fields not defined in the contract:
+
+```python
+options = {
+    "strict_mode": True
+}
+
+result = json_validate(data, contract, options)
+```
+
+### 5. OpenAPI Validation
+
+Validly provides powerful validation against OpenAPI/Swagger specifications using the `validate_openapi` function.
+
+#### Basic OpenAPI Validation
+
+Validate JSON data against an OpenAPI schema:
+
+```python
+from Validly import validate_openapi, validate_openapi_file, validate_openapi_url, load_openapi_schema
+
+# Method 1: Load schema from file and validate
+result = validate_openapi_file(data, 'openapi.json')
+
+# Method 2: Load schema from URL and validate
+result = validate_openapi_url(data, 'https://example.com/api/openapi.json')
+
+# Method 3: Load schema manually and validate
+with open('openapi.json', 'r') as f:
+    openapi_schema = json.load(f)
+
+# Or load from URL
+openapi_schema = load_openapi_schema('https://example.com/api/openapi.json')
+
+# Sample data to validate
+data = {
+    "name": "John Doe",
+    "email": "john@example.com",
+    "age": 30
+}
+
+# Validate against a specific schema component
+user_schema = openapi_schema["components"]["schemas"]["User"]
+result = validate_openapi(data, user_schema)
+
+# Result:
+# {
+#     "result": True,
+#     "errors": []
+# }
+```
+
+#### Validating Request/Response
+
+Validate request or response data against OpenAPI path definitions:
+
+```python
+# Extract request schema from OpenAPI spec
+request_schema = openapi_schema["paths"]["/users"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+
+# Validate request data
+request_data = {
+    "name": "John Doe",
+    "email": "john@example.com",
+    "age": 30
+}
+
+result = validate_openapi(request_data, request_schema)
+
+# Extract response schema for a 200 response
+response_schema = openapi_schema["paths"]["/users"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+
+# Validate response data
+response_data = {
+    "id": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "created_at": "2025-09-06T06:00:00Z"
+}
+
+result = validate_openapi(response_data, response_schema)
+```
+
+#### OpenAPI Schema Components
+
+The `validate_openapi` function automatically handles OpenAPI schema features:
+
+- **Data Types**: string, number, integer, boolean, array, object
+- **Formats**: uuid, email, uri, date, date-time
+- **Validations**: required fields, minimum/maximum values, patterns
+- **Schema Structures**: oneOf, anyOf, allOf
+- **Nested References**: $ref references to other schema components
+
+```python
+# OpenAPI schema with nested references
+schema = {
+    "openapi": "3.0.0",
+    "components": {
+        "schemas": {
+            "User": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "address": {"$ref": "#/components/schemas/Address"}
+                }
+            },
+            "Address": {
+                "type": "object",
+                "properties": {
+                    "street": {"type": "string"},
+                    "city": {"type": "string"}
+                }
+            }
+        }
+    }
+}
+
+# Data with nested structure
+data = {
+    "name": "John Doe",
+    "address": {
+        "street": "123 Main St",
+        "city": "New York"
+    }
+}
+
+# Validate against the schema with nested references
+result = validate_openapi(data, schema["components"]["schemas"]["User"])
+```
+
+```python
+# OpenAPI schema with various validations
+schema = {
+    "type": "object",
+    "required": ["name", "email"],
+    "properties": {
+        "name": {
+            "type": "string",
+            "minLength": 1
+        },
+        "email": {
+            "type": "string",
+            "format": "email"
+        },
+        "age": {
+            "type": "integer",
+            "minimum": 18
+        }
+    }
+}
+
+# Validate data against the schema
+result = validate_openapi(data, schema)
+```
+
+#### Custom OpenAPI Validation
+
+You can extend OpenAPI validation with custom validators:
+
+```python
+# First, create a custom validator file
+with open('custom_validators.py', 'w') as f:
+    f.write(r"""
+def validate_complex_email(expected, actual):
+    import re
+    if not isinstance(actual, str):
+        return False, "Value is not a string"
+    
+    # More complex email validation than the standard format
+    email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+    if not email_pattern.match(actual):
+        return False, f"'{actual}' is not a valid email format"
+    
+    # Additional validation rules
+    if actual.endswith('.test'):
+        return False, "Test domains are not allowed"
+    
+    return True, ""
+""")
+
+# Then use the custom validator with OpenAPI validation
+options = {
+    "custom_validators": {
+        "email": "validate_complex_email"
+    },
+    "custom_validator_path": "custom_validators.py"
+}
+
+result = validate_openapi(data, schema, options)
 ```
 
 ## Contributing
