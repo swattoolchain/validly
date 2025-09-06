@@ -2,13 +2,13 @@ from setuptools import setup, find_packages
 
 setup(
     name='Validly',
-    version='1.0.3',
+    version='1.0.6',
     author='Dinesh RVL',
     author_email='swat.github@gmail.com',
     description='A powerful and extensible data validation and comparison tool for developers and testers.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
-    url='https://github.com/swat-github/Validly',
+    url='https://github.com/swattoolchain/validly',
     packages=find_packages(),
     classifiers=[
         'Programming Language :: Python :: 3',
