@@ -1,10 +1,32 @@
-# validly
-
-### **Validly**
+# Validly
 
 A powerful and extensible data validation and comparison tool designed for developers and testers. Easily integrate into your automation projects to ensure JSON data integrity.
 
-### **Features**
+## Table of Contents
+
+- [Installation](#installation)
+- [Available Tools](#available-tools)
+  - [1. JSON Difference (`json_difference`)](#1-json-difference)
+    - [Basic Usage](#basic-usage)
+    - [Advanced Usage with Options](#advanced-usage-with-options)
+    - [List Validation Modes](#list-validation-modes)
+    - [Custom Validators](#custom-validators)
+    - [CLI Usage](#cli-usage)
+  - [2. JSON Filtering (`jsonfilter`)](#2-json-filtering)
+    - [Basic Filtering](#basic-filtering)
+    - [Include vs Exclude Filtering](#include-vs-exclude-filtering)
+    - [Wildcard Filtering](#wildcard-filtering)
+    - [Regex-based Filtering](#regex-based-filtering)
+    - [Filtering from Files](#filtering-from-files)
+  - [3. JSON Transformation (`json_transform`)](#3-json-transformation)
+    - [Basic Transformation](#basic-transformation)
+    - [Adding New Fields](#adding-new-fields)
+    - [Custom Transformers](#custom-transformers-1)
+    - [Transforming from Files](#transforming-from-files)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Features
 
   * **Deep, Recursive Comparison**: Validates nested JSON structures seamlessly.
   * **Flexible Options**: Control validation with a rich set of options for every use case.
@@ -17,19 +39,21 @@ A powerful and extensible data validation and comparison tool designed for devel
   * **JSON Filtering**: Filter JSON data based on JSON paths and regex patterns with include/exclude options.
   * **JSON Transformation**: Transform JSON data with built-in and custom transformation functions.
 
----
-
-### **Installation**
+## Installation
 
 `Validly` is available on PyPI. Install it with `pip`:
 
 ```sh
 pip install Validly
-````
+```
 
------
+## Available Tools
 
-### **Basic Usage**
+### 1. JSON Difference
+
+The `json_difference` function compares two JSON objects and identifies any differences between them.
+
+#### Basic Usage
 
 Use `json_difference` to compare two JSON objects. It returns a list of failure messages if differences are found.
 
@@ -54,9 +78,7 @@ differences = json_difference(expected, actual)
 # }
 ```
 
------
-
-### **Advanced Usage with Options**
+#### Advanced Usage with Options
 
 Pass a dictionary of options to customize the validation behavior.
 
@@ -374,11 +396,11 @@ python -m Validly expected.json actual.json options.json
 
 -----
 
-### **JSON Filtering**
+### 2. JSON Filtering
 
 Validly provides powerful JSON filtering capabilities through two main functions: `jsonfilter` and `jsonfilter_file`.
 
-#### **Basic Filtering**
+#### Basic Filtering
 
 Filter JSON data using JSON paths and regex patterns:
 
@@ -428,7 +450,7 @@ filtered_data = jsonfilter(data, options)
 # }
 ```
 
-#### **Include vs Exclude Filtering**
+#### Include vs Exclude Filtering
 
 Choose between including or excluding the matched paths:
 
@@ -544,11 +566,11 @@ filtered_data = jsonfilter_file("data.json", options)
 print(filtered_data)
 ```
 
-### **JSON Transformation**
+### 3. JSON Transformation
 
 Validly provides powerful JSON transformation capabilities through two main functions: `json_transform` and `json_transform_file`.
 
-#### **Basic Transformation**
+#### Basic Transformation
 
 Transform JSON data using built-in transformation methods:
 
@@ -589,7 +611,7 @@ transformed_data = json_transform(data, options)
 # }
 ```
 
-#### **Adding New Fields**
+#### Adding New Fields
 
 Add new fields to the JSON structure:
 
@@ -697,14 +719,10 @@ transformed_data = json_transform_file("data.json", options)
 print(transformed_data)
 ```
 
------
-
-### **Contributing**
+## Contributing
 
 We welcome contributions! If you have a feature idea or find a bug, please open an issue or submit a pull request on [GitHub](https://github.com/swattoolchain/validly).
 
------
-
-### **License**
+## License
 
 This project is licensed under the MIT License.
