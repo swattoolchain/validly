@@ -460,6 +460,677 @@ def _filter_list(data: List[Any], options: Dict[str, Any], current_path: str) ->
 
 
 # ==============================================================================
+# OpenAPI Schema Loading and Parsing Functions
+# ==============================================================================
+
+import json
+import requests
+from pathlib import Path
+from urllib.parse import urlparse
+
+def load_openapi_schema(source: str) -> Dict[str, Any]:
+    """
+    Load an OpenAPI schema from a file path or URL.
+    
+    Args:
+        source (str): File path or URL to the OpenAPI schema.
+    
+    Returns:
+        Dict[str, Any]: The loaded OpenAPI schema.
+        
+    Raises:
+        FileNotFoundError: If the file doesn't exist.
+        requests.RequestException: If there's an error fetching the URL.
+        json.JSONDecodeError: If the content is not valid JSON.
+    """
+    # Check if source is a URL
+    parsed_url = urlparse(source)
+    if parsed_url.scheme in ['http', 'https']:
+        # Load from URL
+        response = requests.get(source)
+        response.raise_for_status()  # Raise exception for 4XX/5XX responses
+        return response.json()
+    else:
+        # Load from file
+        file_path = Path(source)
+        if not file_path.exists():
+            raise FileNotFoundError(f"OpenAPI schema file not found at: {source}")
+        
+        with open(file_path, 'r') as f:
+            return json.load(f)
+
+
+def parse_openapi_schema(schema: Dict[str, Any], resolve_refs: bool = True) -> Dict[str, Any]:
+    """
+    Parse an OpenAPI schema and convert it to a format that can be used with json_validate.
+    
+    Args:
+        schema (Dict[str, Any]): The OpenAPI schema to parse.
+        resolve_refs (bool): Whether to resolve $ref references in the schema.
+    
+    Returns:
+        Dict[str, Any]: A contract schema that can be used with json_validate.
+    """
+    # Store the full schema for reference resolution
+    if resolve_refs:
+        parse_openapi_schema._full_schema = schema
+    
+    # Check if this is a complete OpenAPI spec or just a schema component
+    if "openapi" in schema and "paths" in schema:
+        # This is a complete OpenAPI spec, extract components/schemas
+        if "components" in schema and "schemas" in schema["components"]:
+            schemas = schema["components"]["schemas"]
+        else:
+            schemas = {}
+            
+        # Extract path schemas
+        path_schemas = {}
+        for path, path_item in schema.get("paths", {}).items():
+            for method, operation in path_item.items():
+                if method.lower() in ["get", "post", "put", "delete", "patch"]:
+                    operation_id = operation.get("operationId", f"{method}_{path}")
+                    
+                    # Extract request body schema
+                    if "requestBody" in operation and "content" in operation["requestBody"]:
+                        for content_type, content_schema in operation["requestBody"]["content"].items():
+                            if "schema" in content_schema:
+                                path_schemas[f"{operation_id}_request"] = content_schema["schema"]
+                    
+                    # Extract response schemas
+                    if "responses" in operation:
+                        for status_code, response in operation["responses"].items():
+                            if "content" in response:
+                                for content_type, content_schema in response["content"].items():
+                                    if "schema" in content_schema:
+                                        path_schemas[f"{operation_id}_response_{status_code}"] = content_schema["schema"]
+        
+        # Combine schemas
+        schemas.update(path_schemas)
+        return _convert_openapi_schemas_to_contract(schemas, resolve_refs)
+    
+    # This is just a schema component
+    return _convert_openapi_schema_to_contract(schema, resolve_refs)
+
+
+def _convert_openapi_schemas_to_contract(schemas: Dict[str, Any], resolve_refs: bool = True) -> Dict[str, Any]:
+    """
+    Convert multiple OpenAPI schemas to a contract schema.
+    
+    Args:
+        schemas (Dict[str, Any]): Dictionary of OpenAPI schemas.
+        resolve_refs (bool): Whether to resolve $ref references in the schema.
+    
+    Returns:
+        Dict[str, Any]: A contract schema that can be used with json_validate.
+    """
+    # First pass: convert all schemas without resolving references
+    contract = {}
+    for name, schema in schemas.items():
+        contract[name] = _convert_openapi_schema_to_contract(schema, False)
+    
+    # Second pass: resolve references if needed
+    if resolve_refs:
+        # Store the schemas for reference resolution
+        _convert_openapi_schema_to_contract._schemas = schemas
+        
+        # Resolve references in all schemas
+        for name, schema in contract.items():
+            contract[name] = _resolve_references(schema, schemas)
+    
+    return contract
+
+
+def _convert_openapi_schema_to_contract(schema: Dict[str, Any], resolve_refs: bool = True) -> Any:
+    """
+    Convert an OpenAPI schema to a contract schema.
+    
+    Args:
+        schema (Dict[str, Any]): The OpenAPI schema to convert.
+        resolve_refs (bool): Whether to resolve $ref references in the schema.
+    
+    Returns:
+        Any: A contract schema that can be used with json_validate.
+    """
+    # Handle references
+    if isinstance(schema, dict) and "$ref" in schema:
+        ref_path = schema["$ref"]
+        if resolve_refs:
+            # Resolve the reference
+            return _resolve_ref(ref_path, getattr(_convert_openapi_schema_to_contract, "_schemas", {}))
+        else:
+            # Just return a reference placeholder
+            if ref_path.startswith("#/components/schemas/"):
+                schema_name = ref_path.split("/")[-1]
+                return {"$ref": schema_name}
+            else:
+                return {"$ref": ref_path}
+    
+    # Handle different types
+    if not isinstance(schema, dict):
+        return schema
+    
+    schema_type = schema.get("type")
+    
+    if schema_type == "object":
+        result = {}
+        for prop_name, prop_schema in schema.get("properties", {}).items():
+            result[prop_name] = _convert_openapi_schema_to_contract(prop_schema, resolve_refs)
+        return result
+    
+    elif schema_type == "array":
+        items_schema = schema.get("items", {})
+        return [_convert_openapi_schema_to_contract(items_schema, resolve_refs)]
+    
+    elif schema_type == "string":
+        return ""
+    
+    elif schema_type == "integer" or schema_type == "number":
+        return 0
+    
+    elif schema_type == "boolean":
+        return False
+    
+    elif schema_type == "null":
+        return None
+    
+    # Handle oneOf, anyOf, allOf
+    if "oneOf" in schema:
+        # Use the first schema as a representative
+        return _convert_openapi_schema_to_contract(schema["oneOf"][0], resolve_refs)
+    
+    if "anyOf" in schema:
+        # Use the first schema as a representative
+        return _convert_openapi_schema_to_contract(schema["anyOf"][0], resolve_refs)
+    
+    if "allOf" in schema:
+        # Merge all schemas
+        result = {}
+        for sub_schema in schema["allOf"]:
+            sub_result = _convert_openapi_schema_to_contract(sub_schema, resolve_refs)
+            if isinstance(sub_result, dict):
+                result.update(sub_result)
+        return result
+    
+    # Default
+    return {}
+
+
+def _resolve_references(schema: Any, schemas: Dict[str, Any]) -> Any:
+    """
+    Resolve all references in a schema.
+    
+    Args:
+        schema (Any): The schema to resolve references in.
+        schemas (Dict[str, Any]): Dictionary of all available schemas.
+    
+    Returns:
+        Any: The schema with all references resolved.
+    """
+    if isinstance(schema, dict):
+        if "$ref" in schema:
+            ref_name = schema["$ref"]
+            if ref_name in schemas:
+                # Resolve the reference
+                resolved = _convert_openapi_schema_to_contract(schemas[ref_name], False)
+                # Recursively resolve any nested references
+                return _resolve_references(resolved, schemas)
+            else:
+                # Reference not found, return as is
+                return schema
+        else:
+            # Recursively resolve references in all properties
+            result = {}
+            for key, value in schema.items():
+                result[key] = _resolve_references(value, schemas)
+            return result
+    elif isinstance(schema, list):
+        # Recursively resolve references in all items
+        return [_resolve_references(item, schemas) for item in schema]
+    else:
+        # Primitive value, return as is
+        return schema
+
+
+def _resolve_ref(ref_path: str, schemas: Dict[str, Any]) -> Any:
+    """
+    Resolve a reference path to its schema.
+    
+    Args:
+        ref_path (str): The reference path to resolve.
+        schemas (Dict[str, Any]): Dictionary of all available schemas.
+    
+    Returns:
+        Any: The resolved schema.
+    """
+    if ref_path.startswith("#/components/schemas/"):
+        schema_name = ref_path.split("/")[-1]
+        if schema_name in schemas:
+            return _convert_openapi_schema_to_contract(schemas[schema_name], True)
+    
+    # Reference not found or not supported
+    return {"$ref": ref_path}
+
+
+def _extract_openapi_validations(schema: Dict[str, Any], path: str = "") -> Dict[str, Any]:
+    """
+    Extract validation rules from an OpenAPI schema.
+    
+    Args:
+        schema (Dict[str, Any]): The OpenAPI schema to extract validations from.
+        path (str): The current JSON path.
+    
+    Returns:
+        Dict[str, Any]: Validation options that can be used with json_validate.
+    """
+    validations = {
+        "type_validations": {},
+        "required_keys": [],
+        "regex_keys": {},
+        "numeric_validations": {}
+    }
+    
+    # Handle references
+    if "$ref" in schema:
+        return validations
+    
+    # Extract type validations
+    schema_type = schema.get("type")
+    if schema_type and path:
+        type_map = {
+            "string": "string",
+            "integer": "number",
+            "number": "number",
+            "boolean": "boolean",
+            "array": "array",
+            "object": "object"
+        }
+        validations["type_validations"][path] = type_map.get(schema_type, "any")
+    
+    # Extract format validations
+    schema_format = schema.get("format")
+    if schema_format and path:
+        if schema_format == "uuid":
+            validations.setdefault("is_uuid_keys", []).append(path)
+        elif schema_format == "email":
+            validations["regex_keys"][path] = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        elif schema_format == "uri":
+            validations["regex_keys"][path] = r"^(https?|ftp)://[^\s/$.?#].[^\s]*$"
+        elif schema_format == "date":
+            validations["regex_keys"][path] = r"^\d{4}-\d{2}-\d{2}$"
+        elif schema_format == "date-time":
+            validations["regex_keys"][path] = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$"
+    
+    # Extract required keys
+    if schema_type == "object" and "required" in schema:
+        for prop_name in schema["required"]:
+            prop_path = f"{path}.{prop_name}" if path else prop_name
+            validations["required_keys"].append(prop_path)
+    
+    # Extract numeric validations
+    if schema_type in ["integer", "number"] and path:
+        if "minimum" in schema:
+            validations["numeric_validations"][path] = {"operator": "ge", "value": schema["minimum"]}
+        elif "exclusiveMinimum" in schema:
+            validations["numeric_validations"][path] = {"operator": "gt", "value": schema["exclusiveMinimum"]}
+        
+        if "maximum" in schema:
+            validations["numeric_validations"][path] = {"operator": "le", "value": schema["maximum"]}
+        elif "exclusiveMaximum" in schema:
+            validations["numeric_validations"][path] = {"operator": "lt", "value": schema["exclusiveMaximum"]}
+    
+    # Extract string validations
+    if schema_type == "string" and path:
+        if "pattern" in schema:
+            validations["regex_keys"][path] = schema["pattern"]
+        
+        if "minLength" in schema:
+            # We'll handle this with a custom validator
+            pass
+        
+        if "maxLength" in schema:
+            # We'll handle this with a custom validator
+            pass
+    
+    # Extract array validations
+    if schema_type == "array" and path:
+        if "minItems" in schema:
+            # We'll handle this with a custom validator
+            pass
+        
+        if "maxItems" in schema:
+            # We'll handle this with a custom validator
+            pass
+        
+        if "uniqueItems" in schema and schema["uniqueItems"]:
+            # We'll handle this with a custom validator
+            pass
+    
+    # Recursively extract validations from nested schemas
+    if schema_type == "object" and "properties" in schema:
+        for prop_name, prop_schema in schema["properties"].items():
+            prop_path = f"{path}.{prop_name}" if path else prop_name
+            nested_validations = _extract_openapi_validations(prop_schema, prop_path)
+            
+            # Merge validations
+            for key, value in nested_validations.items():
+                if isinstance(value, dict):
+                    validations.setdefault(key, {}).update(value)
+                elif isinstance(value, list):
+                    validations.setdefault(key, []).extend(value)
+    
+    if schema_type == "array" and "items" in schema:
+        items_schema = schema["items"]
+        # For arrays, we can't easily validate individual items without knowing their indices
+        # So we'll just extract validations for the array type itself
+    
+    return validations
+
+
+def validate_openapi(data: Any, schema: Union[Dict[str, Any], str], options: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bool, List[Dict[str, Any]]]]:
+    """
+    Validate data against an OpenAPI schema.
+    
+    Args:
+        data (Any): The data to validate.
+        schema (Union[Dict[str, Any], str]): The OpenAPI schema to validate against.
+            This can be a dictionary containing the schema, a file path, or a URL.
+        options (Optional[Dict[str, Any]]): Additional validation options.
+    
+    Returns:
+        Dict[str, Union[bool, List[Dict[str, Any]]]]: Validation results.
+    """
+    # Load schema if it's a file path or URL
+    if isinstance(schema, str):
+        schema = load_openapi_schema(schema)
+    
+    # Convert OpenAPI schema to contract
+    contract = parse_openapi_schema(schema)
+    
+    # Extract validations from OpenAPI schema
+    schema_validations = _extract_openapi_validations(schema)
+    
+    # Merge with user-provided options
+    merged_options = schema_validations.copy()
+    if options:
+        for key, value in options.items():
+            if isinstance(value, dict):
+                merged_options.setdefault(key, {}).update(value)
+            elif isinstance(value, list):
+                merged_options.setdefault(key, []).extend(value)
+            else:
+                merged_options[key] = value
+    
+    # Validate using json_validate
+    return json_validate(data, contract, merged_options)
+
+
+def validate_openapi_file(data: Any, schema_file: str, options: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bool, List[Dict[str, Any]]]]:
+    """
+    Validate data against an OpenAPI schema loaded from a file.
+    
+    Args:
+        data (Any): The data to validate.
+        schema_file (str): Path to the OpenAPI schema file.
+        options (Optional[Dict[str, Any]]): Additional validation options.
+    
+    Returns:
+        Dict[str, Union[bool, List[Dict[str, Any]]]]: Validation results.
+    """
+    return validate_openapi(data, schema_file, options)
+
+
+def validate_openapi_url(data: Any, schema_url: str, options: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bool, List[Dict[str, Any]]]]:
+    """
+    Validate data against an OpenAPI schema loaded from a URL.
+    
+    Args:
+        data (Any): The data to validate.
+        schema_url (str): URL to the OpenAPI schema.
+        options (Optional[Dict[str, Any]]): Additional validation options.
+    
+    Returns:
+        Dict[str, Union[bool, List[Dict[str, Any]]]]: Validation results.
+    """
+    return validate_openapi(data, schema_url, options)
+
+
+# ==============================================================================
+# JSON Validation Function
+# ==============================================================================
+
+def json_validate(data: Any, contract: Dict[str, Any], options: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bool, List[Dict[str, Any]]]]:
+    """
+    Validates a single JSON object against an API contract.
+    
+    Args:
+        data (Any): The JSON data to validate (as a Python dict/list).
+        contract (Dict[str, Any]): The contract schema to validate against.
+        options (Optional[Dict[str, Any]]): Validation options with the following possible keys:
+            - custom_validators (Dict[str, str]): A dictionary mapping JSON paths to custom validator function names.
+            - custom_validator_path (str): Path to a Python file with custom validator functions.
+            - wildcard_keys (List[str]): List of keys where exact value matching is not required.
+            - numeric_validations (Dict[str, Dict]): Dictionary of numeric validation rules.
+            - is_uuid_keys (List[str]): List of keys that should contain valid UUIDs.
+            - is_pan_keys (List[str]): List of keys that should contain valid PAN numbers.
+            - is_aadhar_keys (List[str]): List of keys that should contain valid Aadhaar numbers.
+            - regex_keys (Dict[str, str]): Dictionary mapping keys to regex patterns they should match.
+            - required_keys (List[str]): List of keys that must be present in the data.
+            - type_validations (Dict[str, str]): Dictionary mapping keys to expected types.
+    
+    Returns:
+        Dict[str, Union[bool, List[Dict[str, Any]]]]:
+            - 'result': True if validation passes, False otherwise.
+            - 'errors': A list of error dictionaries.
+    """
+    if options is None:
+        options = {}
+    
+    errors = []
+    
+    # Load custom validators if specified
+    if options.get("custom_validator_path") and not hasattr(json_validate, "_validators"):
+        try:
+            json_validate._validators = _load_custom_validators(options["custom_validator_path"])
+        except Exception as e:
+            errors.append({"field": None, "jsonpath": None, "message": f"Custom validator loading failed: {e}"})
+            json_validate._validators = {}
+    
+    # Helper function to add validation errors
+    def _add_error(field: str, jsonpath: str, message: str):
+        errors.append({"field": field, "jsonpath": jsonpath, "message": message})
+    
+    # Helper function to get the leaf key from a path
+    def get_leaf_key(current_path: str) -> str:
+        if ']' in current_path:
+            return current_path.split(']')[-1].strip('.')
+        return current_path.split('.')[-1]
+    
+    # Helper function to check if a path is in a list of option paths
+    def is_in_options(current_path: str, option_list: List[str]) -> bool:
+        if not option_list:
+            return False
+        leaf_key = get_leaf_key(current_path)
+        return any(
+            opt == current_path or opt == leaf_key or current_path.endswith(f".{opt}")
+            for opt in option_list
+        )
+    
+    # Helper function to validate a field against the contract
+    def validate_field(data_value: Any, contract_value: Any, path: str):
+        field_name = get_leaf_key(path)
+        
+        # Check if this field has a custom validator
+        custom_validator = None
+        if options.get("custom_validators", {}).get(path):
+            method_name = options["custom_validators"][path]
+            validators = getattr(json_validate, "_validators", {})
+            custom_validator = validators.get(method_name)
+        
+        # If there's a custom validator, use it
+        if custom_validator:
+            try:
+                result, msg = custom_validator(contract_value, data_value)
+                if not result:
+                    _add_error(field_name, path, f"Custom validation failed: {msg}")
+                return
+            except Exception as e:
+                _add_error(field_name, path, f"Custom validator raised an error: {e}")
+                return
+        
+        # Check type validation
+        if options.get("type_validations", {}).get(path):
+            expected_type = options["type_validations"][path]
+            
+            # Handle special case for integers vs floats
+            if expected_type == "number":
+                if not isinstance(data_value, (int, float)):
+                    _add_error(field_name, path, f"Type mismatch: expected number, got {type(data_value).__name__}")
+            # Handle special case for strings
+            elif expected_type == "string":
+                if not isinstance(data_value, str):
+                    _add_error(field_name, path, f"Type mismatch: expected string, got {type(data_value).__name__}")
+            # Handle special case for booleans
+            elif expected_type == "boolean":
+                if not isinstance(data_value, bool):
+                    _add_error(field_name, path, f"Type mismatch: expected boolean, got {type(data_value).__name__}")
+            # Handle special case for arrays
+            elif expected_type == "array":
+                if not isinstance(data_value, list):
+                    _add_error(field_name, path, f"Type mismatch: expected array, got {type(data_value).__name__}")
+            # Handle special case for objects
+            elif expected_type == "object":
+                if not isinstance(data_value, dict):
+                    _add_error(field_name, path, f"Type mismatch: expected object, got {type(data_value).__name__}")
+            # Handle general case
+            elif expected_type != "any":
+                type_map = {
+                    "str": "string",
+                    "int": "number",
+                    "float": "number",
+                    "bool": "boolean",
+                    "list": "array",
+                    "dict": "object"
+                }
+                actual_type = type(data_value).__name__
+                mapped_type = type_map.get(actual_type, actual_type)
+                if mapped_type != expected_type:
+                    _add_error(field_name, path, f"Type mismatch: expected {expected_type}, got {mapped_type}")
+        
+        # Check if this is a wildcard key (value doesn't matter)
+        if is_in_options(path, options.get("wildcard_keys", [])):
+            return
+        
+        # Check UUID format
+        if is_in_options(path, options.get("is_uuid_keys", [])):
+            uuid_pattern = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+            if not isinstance(data_value, str) or not uuid_pattern.match(data_value):
+                _add_error(field_name, path, f"UUID format mismatch: expected valid UUID, got '{data_value}'")
+            return
+        
+        # Check PAN format
+        if is_in_options(path, options.get("is_pan_keys", [])):
+            pan_pattern = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
+            if not isinstance(data_value, str) or not pan_pattern.match(data_value):
+                _add_error(field_name, path, f"PAN format mismatch: expected valid PAN, got '{data_value}'")
+            return
+        
+        # Check Aadhaar format
+        if is_in_options(path, options.get("is_aadhar_keys", [])):
+            aadhar_pattern = re.compile(r"^[0-9]{4}[0-9]{4}[0-9]{4}$")
+            if not isinstance(data_value, str) or not aadhar_pattern.match(data_value):
+                _add_error(field_name, path, f"Aadhaar format mismatch: expected valid Aadhaar, got '{data_value}'")
+            return
+        
+        # Check regex pattern
+        if options.get("regex_keys", {}).get(path):
+            regex_pattern = options["regex_keys"][path]
+            if not isinstance(data_value, str) or not re.fullmatch(regex_pattern, data_value):
+                _add_error(field_name, path, f"Regex mismatch: expected pattern '{regex_pattern}', got '{data_value}'")
+            return
+        
+        # Check numeric validations
+        if options.get("numeric_validations", {}).get(path):
+            rule = options["numeric_validations"][path]
+            try:
+                actual_num = float(data_value)
+                expected_num = float(rule["value"])
+                operator = rule["operator"]
+                
+                if operator == "gt" and not (actual_num > expected_num):
+                    _add_error(field_name, path, f"Numeric validation failed: Value is not greater than {expected_num}")
+                elif operator == "lt" and not (actual_num < expected_num):
+                    _add_error(field_name, path, f"Numeric validation failed: Value is not less than {expected_num}")
+                elif operator == "ge" and not (actual_num >= expected_num):
+                    _add_error(field_name, path, f"Numeric validation failed: Value is not greater than or equal to {expected_num}")
+                elif operator == "le" and not (actual_num <= expected_num):
+                    _add_error(field_name, path, f"Numeric validation failed: Value is not less than or equal to {expected_num}")
+                elif operator == "eq" and not (actual_num == expected_num):
+                    _add_error(field_name, path, f"Numeric validation failed: Value is not equal to {expected_num}")
+                elif operator == "ne" and not (actual_num != expected_num):
+                    _add_error(field_name, path, f"Numeric validation failed: Value is equal to {expected_num}")
+            except (ValueError, TypeError):
+                _add_error(field_name, path, f"Numeric validation failed: Value '{data_value}' is not a valid number")
+            return
+    
+    # Helper function to validate a dictionary against the contract
+    def validate_dict(data_dict: Dict[str, Any], contract_dict: Dict[str, Any], current_path: str):
+        # Check required keys
+        for key, value in contract_dict.items():
+            key_path = f"{current_path}.{key}" if current_path else key
+            
+            # Check if key is required and missing
+            if key not in data_dict:
+                if is_in_options(key_path, options.get("required_keys", [])):
+                    _add_error(key, key_path, f"Required key missing: {key_path}")
+                continue
+            
+            # Validate nested structures
+            if isinstance(value, dict) and isinstance(data_dict[key], dict):
+                validate_dict(data_dict[key], value, key_path)
+            elif isinstance(value, list) and isinstance(data_dict[key], list):
+                validate_list(data_dict[key], value, key_path)
+            else:
+                validate_field(data_dict[key], value, key_path)
+        
+        # Check for extra keys if strict mode is enabled
+        if options.get("strict_mode", False):
+            for key in data_dict:
+                if key not in contract_dict:
+                    key_path = f"{current_path}.{key}" if current_path else key
+                    _add_error(key, key_path, f"Extra key not in contract: {key_path}")
+    
+    # Helper function to validate a list against the contract
+    def validate_list(data_list: List[Any], contract_list: List[Any], current_path: str):
+        # If contract list is empty, we can't validate the items
+        if not contract_list:
+            return
+        
+        # Get the first item in the contract list as the template
+        template_item = contract_list[0]
+        
+        # Validate each item in the data list against the template
+        for i, item in enumerate(data_list):
+            item_path = f"{current_path}[{i}]"
+            
+            if isinstance(template_item, dict) and isinstance(item, dict):
+                validate_dict(item, template_item, item_path)
+            elif isinstance(template_item, list) and isinstance(item, list):
+                validate_list(item, template_item, item_path)
+            else:
+                validate_field(item, template_item, item_path)
+    
+    # Start validation based on the root types
+    if isinstance(data, dict) and isinstance(contract, dict):
+        validate_dict(data, contract, "")
+    elif isinstance(data, list) and isinstance(contract, list):
+        validate_list(data, contract, "")
+    else:
+        validate_field(data, contract, "")
+    
+    return {"result": len(errors) == 0, "errors": errors}
+
+
+# ==============================================================================
 # JSON Transform Functions
 # ==============================================================================
 
