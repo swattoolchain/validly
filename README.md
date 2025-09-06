@@ -14,6 +14,8 @@ A powerful and extensible data validation and comparison tool designed for devel
   * **Custom Validators**: Extend validation logic with your own Python methods from an external file.
   * **Numeric Comparisons**: Validate fields with operators like greater than (`gt`), less than (`lt`), and more.
   * **Wildcard Matching**: Use placeholders to ignore values that are dynamic or unpredictable.
+  * **JSON Filtering**: Filter JSON data based on JSON paths and regex patterns with include/exclude options.
+  * **JSON Transformation**: Transform JSON data with built-in and custom transformation functions.
 
 ---
 
@@ -369,6 +371,337 @@ python -m Validly expected.json actual.json options.json
   "skip_keys": ["user_id", "id"]
 }
 ```
+
+-----
+
+### **JSON Filtering**
+
+Validly provides powerful JSON filtering capabilities through two main functions: `jsonfilter` and `jsonfilter_file`.
+
+#### **Basic Filtering**
+
+Filter JSON data using JSON paths and regex patterns:
+
+```python
+from Validly import jsonfilter
+
+# Sample data
+data = {
+    "user": {
+        "id": 1234,
+        "name": "John Doe",
+        "contact": {
+            "email": "john@example.com",
+            "phone": "555-1234"
+        }
+    },
+    "orders": [
+        {"id": 101, "product": "Laptop", "price": 999.99},
+        {"id": 102, "product": "Mouse", "price": 24.99}
+    ],
+    "metadata": {
+        "version": "1.0",
+        "timestamp": "2025-09-06T06:00:00Z"
+    }
+}
+
+# Filter options (include mode is default)
+options = {
+    "jsonpath": ["user.name", "user.contact.email", "orders"]
+}
+
+# Apply filtering
+filtered_data = jsonfilter(data, options)
+
+# Result:
+# {
+#     "user": {
+#         "name": "John Doe",
+#         "contact": {
+#             "email": "john@example.com"
+#         }
+#     },
+#     "orders": [
+#         {"id": 101, "product": "Laptop", "price": 999.99},
+#         {"id": 102, "product": "Mouse", "price": 24.99}
+#     ]
+# }
+```
+
+#### **Include vs Exclude Filtering**
+
+Choose between including or excluding the matched paths:
+
+```python
+# Include mode (default)
+options = {
+    "jsonpath": ["user.id", "metadata.version"],
+    "filter_type": "include"  # Only keep matched paths
+}
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234
+#     },
+#     "metadata": {
+#         "version": "1.0"
+#     }
+# }
+
+# Exclude mode
+options = {
+    "jsonpath": ["user.id", "metadata.version"],
+    "filter_type": "exclude"  # Remove matched paths, keep everything else
+}
+
+# Result:
+# {
+#     "user": {
+#         "name": "John Doe",
+#         "contact": {
+#             "email": "john@example.com",
+#             "phone": "555-1234"
+#         }
+#     },
+#     "orders": [
+#         {"id": 101, "product": "Laptop", "price": 999.99},
+#         {"id": 102, "product": "Mouse", "price": 24.99}
+#     ],
+#     "metadata": {
+#         "timestamp": "2025-09-06T06:00:00Z"
+#     }
+# }
+```
+
+#### **Wildcard Filtering**
+
+Use wildcards to include multiple fields matching a pattern:
+
+```python
+# Filter with wildcards
+options = {
+    "jsonpath": ["user.*", "metadata.version"]
+}
+
+filtered_data = jsonfilter(data, options)
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234,
+#         "name": "John Doe",
+#         "contact": {
+#             "email": "john@example.com",
+#             "phone": "555-1234"
+#         }
+#     },
+#     "metadata": {
+#         "version": "1.0"
+#     }
+# }
+```
+
+#### **Regex-based Filtering**
+
+Filter keys that match a regular expression pattern:
+
+```python
+# Filter with regex
+options = {
+    "regex": "id"
+}
+
+filtered_data = jsonfilter(data, options)
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234
+#     },
+#     "orders": [
+#         {"id": 101},
+#         {"id": 102}
+#     ]
+# }
+```
+
+#### **Filtering from Files**
+
+Filter JSON data directly from files:
+
+```python
+from Validly import jsonfilter_file
+
+# Filter JSON from a file
+options = {
+    "jsonpath": ["user", "metadata.version"]
+}
+
+filtered_data = jsonfilter_file("data.json", options)
+
+# Process the filtered data
+print(filtered_data)
+```
+
+### **JSON Transformation**
+
+Validly provides powerful JSON transformation capabilities through two main functions: `json_transform` and `json_transform_file`.
+
+#### **Basic Transformation**
+
+Transform JSON data using built-in transformation methods:
+
+```python
+from Validly import json_transform
+
+# Sample data
+data = {
+    "user": {
+        "id": "1234",  # String that needs to be converted to integer
+        "name": "john doe",  # Needs to be capitalized
+        "active": 1  # Needs to be converted to boolean
+    },
+    "price": "99.99"  # String that needs to be converted to float
+}
+
+# Transform options
+options = {
+    "transforms": {
+        "user.id": {"method": "to_int"},
+        "user.name": {"method": "format", "args": {"format": "{0.title()}"}},
+        "user.active": {"method": "to_bool"},
+        "price": {"method": "to_float"}
+    }
+}
+
+# Apply transformation
+transformed_data = json_transform(data, options)
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234,  # Now an integer
+#         "name": "John Doe",  # Now capitalized
+#         "active": True  # Now a boolean
+#     },
+#     "price": 99.99  # Now a float
+# }
+```
+
+#### **Adding New Fields**
+
+Add new fields to the JSON structure:
+
+```python
+# Add new fields
+options = {
+    "add_fields": {
+        "user.full_name": {
+            "value": "John Smith Doe",
+            "parent": "user"
+        },
+        "metadata": {
+            "value": {"created_at": "2025-09-06", "version": "1.0"},
+            "parent": ""
+        }
+    }
+}
+
+transformed_data = json_transform(data, options)
+
+# Result:
+# {
+#     "user": {
+#         "id": "1234",
+#         "name": "john doe",
+#         "active": 1,
+#         "full_name": "John Smith Doe"  # New field added
+#     },
+#     "price": "99.99",
+#     "metadata": {  # New field added at root level
+#         "created_at": "2025-09-06",
+#         "version": "1.0"
+#     }
+# }
+```
+
+#### **Custom Transformers**
+
+Create a Python file with custom transformation functions:
+
+```python
+# custom_transformers.py
+def capitalize_name(value, args, root_data):
+    """Capitalize each word in a name."""
+    if not isinstance(value, str):
+        return value
+    return value.title()
+
+def calculate_total(value, args, root_data):
+    """Calculate total price based on price and quantity."""
+    price = float(root_data.get("price", 0))
+    quantity = args.get("quantity", 1)
+    return price * quantity
+```
+
+Then use these custom transformers in your code:
+
+```python
+options = {
+    "transforms": {
+        "user.name": {"method": "capitalize_name"},
+        "total": {"method": "calculate_total", "args": {"quantity": 3}}
+    },
+    "add_fields": {
+        "total": {
+            "value": 0,  # This will be replaced by the transformer
+            "parent": ""
+        }
+    },
+    "custom_transform_path": "custom_transformers.py"
+}
+
+transformed_data = json_transform(data, options)
+
+# Result:
+# {
+#     "user": {
+#         "id": "1234",
+#         "name": "John Doe",  # Capitalized using custom transformer
+#         "active": 1
+#     },
+#     "price": "99.99",
+#     "total": 299.97  # Calculated using custom transformer (99.99 * 3)
+# }
+```
+
+#### **Transforming from Files**
+
+Transform JSON data directly from files:
+
+```python
+from Validly import json_transform_file
+
+# Transform JSON from a file
+options = {
+    "transforms": {
+        "user.id": {"method": "to_int"},
+        "price": {"method": "to_float"}
+    }
+}
+
+transformed_data = json_transform_file("data.json", options)
+
+# Process the transformed data
+print(transformed_data)
+```
+
+-----
+
+### **Contributing**
+
+We welcome contributions! If you have a feature idea or find a bug, please open an issue or submit a pull request on [GitHub](https://github.com/swattoolchain/validly).
 
 -----
 
