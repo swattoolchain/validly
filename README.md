@@ -6,30 +6,30 @@ A powerful and extensible data validation and comparison tool designed for devel
 
 - [Installation](#installation)
 - [Available Tools](#available-tools)
-  - [1. JSON Difference (`json_difference`)](#1-json-difference)
+  - [1. JSON Difference (json_difference)](#1-json-difference-json_difference)
     - [Basic Usage](#basic-usage)
     - [Advanced Usage with Options](#advanced-usage-with-options)
     - [List Validation Modes](#list-validation-modes)
     - [Custom Validators](#custom-validators)
     - [CLI Usage](#cli-usage)
-  - [2. JSON Filtering (`jsonfilter`)](#2-json-filtering)
+  - [2. JSON Filtering (jsonfilter)](#2-json-filtering-jsonfilter)
     - [Basic Filtering](#basic-filtering)
     - [Include vs Exclude Filtering](#include-vs-exclude-filtering)
     - [Wildcard Filtering](#wildcard-filtering)
     - [Regex-based Filtering](#regex-based-filtering)
     - [Filtering from Files](#filtering-from-files)
-  - [3. JSON Transformation (`json_transform`)](#3-json-transformation)
+  - [3. JSON Transformation (json_transform)](#3-json-transformation-json_transform)
     - [Basic Transformation](#basic-transformation)
     - [Adding New Fields](#adding-new-fields)
     - [Custom Transformers](#custom-transformers-1)
     - [Transforming from Files](#transforming-from-files)
-  - [4. JSON Validation (`json_validate`)](#4-json-validation)
+  - [4. JSON Validation (json_validate)](#4-json-validation-json_validate)
     - [Basic Validation](#basic-validation)
     - [Type Validation](#type-validation)
     - [Format Validation](#format-validation)
     - [Required Fields Validation](#required-fields-validation)
     - [Custom Validation](#custom-validation)
-  - [5. OpenAPI Validation (`validate_openapi`)](#5-openapi-validation)
+  - [5. OpenAPI Validation (validate_openapi)](#5-openapi-validation-validate_openapi)
     - [Basic OpenAPI Validation](#basic-openapi-validation)
     - [Validating Request/Response](#validating-requestresponse)
     - [OpenAPI Schema Components](#openapi-schema-components)
@@ -62,7 +62,7 @@ pip install Validly
 
 ## Available Tools
 
-### 1. JSON Difference
+### 1. JSON Difference (json_difference)
 
 The `json_difference` function compares two JSON objects and identifies any differences between them.
 
@@ -409,7 +409,7 @@ python -m Validly expected.json actual.json options.json
 
 -----
 
-### 2. JSON Filtering
+### 2. JSON Filtering (jsonfilter)
 
 Validly provides powerful JSON filtering capabilities through two main functions: `jsonfilter` and `jsonfilter_file`.
 
@@ -579,7 +579,7 @@ filtered_data = jsonfilter_file("data.json", options)
 print(filtered_data)
 ```
 
-### 3. JSON Transformation
+### 3. JSON Transformation (json_transform)
 
 Validly provides powerful JSON transformation capabilities through two main functions: `json_transform` and `json_transform_file`.
 
@@ -732,7 +732,7 @@ transformed_data = json_transform_file("data.json", options)
 print(transformed_data)
 ```
 
-### 4. JSON Validation
+### 4. JSON Validation (json_validate)
 
 Validly provides a powerful way to validate JSON data against API contracts using the `json_validate` function.
 
@@ -875,7 +875,7 @@ options = {
 result = json_validate(data, contract, options)
 ```
 
-### 5. OpenAPI Validation
+### 5. OpenAPI Validation (validate_openapi)
 
 Validly provides powerful validation against OpenAPI/Swagger specifications using the `validate_openapi` function.
 
