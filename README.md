@@ -15,7 +15,7 @@ A powerful and extensible data validation and comparison tool designed for devel
   * **Numeric Comparisons**: Validate fields with operators like greater than (`gt`), less than (`lt`), and more.
   * **Wildcard Matching**: Use placeholders to ignore values that are dynamic or unpredictable.
 
------
+---
 
 ### **Installation**
 
@@ -23,7 +23,7 @@ A powerful and extensible data validation and comparison tool designed for devel
 
 ```sh
 pip install Validly
-```
+````
 
 -----
 
@@ -40,7 +40,16 @@ actual = {"id": 101, "name": "test"}
 differences = json_difference(expected, actual)
 
 # Output:
-# ❌ Value mismatch at id: expected '100', got '101'
+# {
+#   'result': False,
+#   'errors': [
+#     {
+#       'field': 'id',
+#       'jsonpath': 'id',
+#       'message': "Value mismatch: expected '100', got '101'"
+#     }
+#   ]
+# }
 ```
 
 -----
@@ -80,18 +89,6 @@ actual_data = {
 }
 
 # --- Validation Options ---
-# This is a sample `custom_validators.py` file with your validation logic.
-# You would need to create this file in your project.
-#
-# custom_validators.py
-# import re
-# from typing import Any, Tuple
-# def validate_email_format(expected: Any, actual: Any) -> Tuple[bool, str]:
-#     if not isinstance(actual, str): return False, "Value is not a string."
-#     email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
-#     if email_pattern.match(actual): return True, ""
-#     return False, "Value is not a valid email format."
-
 options = {
     "wildcard_keys": ["user.name"],
     "numeric_validations": {
@@ -100,7 +97,7 @@ options = {
     },
     "is_uuid_keys": ["user.uuid", "uuid_field"],
     "is_pan_keys": ["user.pan", "pan_field"],
-    "is_aadhar_keys": ["user.pan", "pan_field"],
+    "is_aadhar_keys": ["user.aadhar"],
     "custom_validators": {"user.email": "validate_email_format"},
     "custom_validator_path": "custom_validators.py",
     "skip_keys": ["user_id"]
@@ -110,9 +107,74 @@ options = {
 differences = json_difference(expected_data, actual_data, options=options)
 
 # Expected differences:
-# ❌ Value mismatch at user.name: expected 'Jane Doe', got 'John Doe'
-# ❌ Numeric validation failed at login_count: Value is not less than or equal to 5
-# ❌ Extra key in actual: user.email
+# {
+#   'result': False,
+#   'errors': [
+#     {
+#       'field': 'login_count',
+#       'jsonpath': 'login_count',
+#       'message': "Numeric validation failed: Value is not less than or equal to 5"
+#     },
+#     {
+#       'field': 'email',
+#       'jsonpath': 'user.email',
+#       'message': "Extra key in actual: user.email"
+#     }
+#   ]
+# }
+```
+
+### **List Validation Modes**
+
+`Validly` offers two ways to compare lists, controlled by the `list_validation_type` option.
+
+#### **1. Unordered (Default)**
+
+This mode is designed for lists of objects where the order doesn't matter. It intelligently matches objects based on a set of common keys such as `"name"`, `"id"`, and `"qId"`.
+
+```python
+from Validly import json_difference
+
+expected_list = [
+    {"id": 1, "value": "a"},
+    {"id": 2, "value": "b"}
+]
+
+actual_list = [
+    {"id": 2, "value": "b"},
+    {"id": 1, "value": "a"}
+]
+
+# The default behavior is 'unordered', so no option is needed here.
+results = json_difference(expected_list, actual_list)
+
+# { 'result': True, 'errors': [] }
+```
+
+#### **2. Symmetric**
+
+This mode is for lists where the order of items is critical. It performs a direct, index-based comparison.
+
+```python
+options = { "list_validation_type": "symmetric" }
+results = json_difference(expected_list, actual_list, options=options)
+
+# Expected result (failure due to different order):
+# {
+#   'result': False,
+#   'errors': [
+#     {
+#       'field': '0',
+#       'jsonpath': '[0]',
+#       'message': "Value mismatch: expected {'id': 1, 'value': 'a'}, got {'id': 2, 'value': 'b'}"
+#     },
+#     {
+#       'field': '1',
+#       'jsonpath': '[1]',
+#       'message': "Value mismatch: expected {'id': 2, 'value': 'b'}, got {'id': 1, 'value': 'a'}"
+#     }
+#   ]
+# }
 ```
 
 -----
@@ -127,33 +189,186 @@ import re
 from typing import Any, Tuple
 
 def validate_email_format(expected: Any, actual: Any) -> Tuple[bool, str]:
-    # ... (code as provided) ...
+    """Validates if the actual value is a properly formatted email address."""
+    if not isinstance(actual, str):
+        return False, "Value is not a string."
+    
+    email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+    if email_pattern.match(actual):
+        return True, ""
+    
+    return False, "Value is not a valid email format."
+
+def validate_phone_number(expected: Any, actual: Any) -> Tuple[bool, str]:
+    """Validates if the actual value is a properly formatted phone number."""
+    if not isinstance(actual, str):
+        return False, "Value is not a string."
+    
+    # Remove any non-digit characters for comparison
+    digits_only = re.sub(r'\D', '', actual)
+    
+    # Check if it's a valid length for a phone number (adjust as needed)
+    if 10 <= len(digits_only) <= 15:
+        return True, ""
+    
+    return False, f"Value '{actual}' is not a valid phone number format."
+
+def validate_date_format(expected: Any, actual: Any) -> Tuple[bool, str]:
+    """Validates if the actual value matches the expected date format."""
+    if not isinstance(actual, str):
+        return False, "Value is not a string."
+    
+    # Expected should be a format string like "YYYY-MM-DD"
+    if isinstance(expected, str) and expected.startswith("format:"):
+        format_str = expected.split(":")[1].strip()
+        
+        # Simple validation for common formats
+        if format_str == "YYYY-MM-DD":
+            pattern = r"^\d{4}-\d{2}-\d{2}$"
+        elif format_str == "MM/DD/YYYY":
+            pattern = r"^\d{2}/\d{2}/\d{4}$"
+        else:
+            return False, f"Unknown date format: {format_str}"
+            
+        if re.match(pattern, actual):
+            return True, ""
+        return False, f"Value does not match the {format_str} format."
+    
+    # If no format specified, just do direct comparison
+    return expected == actual, f"Expected {expected}, got {actual}"
 ```
 
 Then, configure the validator in your `options` dictionary:
 
 ```python
 options = {
-    "custom_validators": {"user.email": "validate_email_format"},
-    "custom_validator_path": "custom_validators.py"
+    "custom_validators": {
+        "user.email": "validate_email_format",
+        "user.phone": "validate_phone_number",
+        "user.birthdate": "validate_date_format"
+    },
+    "custom_validator_path": "path/to/custom_validators.py"
 }
 ```
 
------
+### **Custom Validator Use Cases**
 
-### **Command Line Usage**
+#### **1. Complex Format Validation**
 
-Compare two files directly from your terminal:
+Validate complex formats that aren't covered by built-in validators:
 
-```sh
-python -m Validly expected.json actual.json
+```python
+# In custom_validators.py
+def validate_credit_card(expected: Any, actual: Any) -> Tuple[bool, str]:
+    """Validates credit card numbers using the Luhn algorithm."""
+    if not isinstance(actual, str):
+        return False, "Value is not a string."
+    
+    # Remove spaces and dashes
+    digits = re.sub(r'[\s-]', '', actual)
+    if not digits.isdigit():
+        return False, "Credit card contains non-digit characters."
+    
+    # Luhn algorithm implementation
+    checksum = 0
+    for i, digit in enumerate(reversed(digits)):
+        n = int(digit)
+        if i % 2 == 1:  # Odd position (0-indexed from right)
+            n *= 2
+            if n > 9:
+                n -= 9
+        checksum += n
+    
+    if checksum % 10 == 0:
+        return True, ""
+    return False, "Invalid credit card number (failed Luhn check)."
 ```
 
------
+#### **2. Conditional Validation**
 
-### **Contributing**
+Validate fields based on the values of other fields:
 
-We welcome contributions\! If you have a feature idea or find a bug, please open an issue or submit a pull request on GitHub.
+```python
+# In custom_validators.py
+def validate_shipping_address(expected: Any, actual: Any) -> Tuple[bool, str]:
+    """Validates shipping address based on country-specific rules."""
+    if not isinstance(actual, dict):
+        return False, "Value is not an object."
+    
+    country = actual.get('country', '')
+    postal_code = actual.get('postalCode', '')
+    
+    # Different validation rules per country
+    if country == 'US':
+        if not re.match(r'^\d{5}(-\d{4})?$', postal_code):
+            return False, "Invalid US ZIP code format."
+    elif country == 'UK':
+        if not re.match(r'^[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}$', postal_code, re.I):
+            return False, "Invalid UK postal code format."
+    
+    return True, ""
+```
+
+#### **3. Integration with External Services**
+
+Validate data against external APIs or databases:
+
+```python
+# In custom_validators.py
+import requests
+
+def validate_against_api(expected: Any, actual: Any) -> Tuple[bool, str]:
+    """Validates data against an external API."""
+    try:
+        # Make API call to validate the data
+        response = requests.post(
+            "https://api.example.com/validate",
+            json={"value": actual}
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("valid"):
+                return True, ""
+            return False, result.get("message", "API validation failed.")
+        
+        return False, f"API validation error: {response.status_code}"
+    except Exception as e:
+        return False, f"API validation exception: {str(e)}"
+```
+
+### **CLI Usage**
+
+The `Validly` CLI allows you to perform validations from the command line without writing a Python script, making it ideal for CI/CD pipelines and automated testing.
+
+```sh
+# Basic usage
+python -m Validly expected.json actual.json
+
+# With options file
+python -m Validly expected.json actual.json options.json
+```
+
+**Example options.json with custom validators:**
+
+```json
+{
+  "list_validation_type": "symmetric",
+  "wildcard_keys": ["user.name"],
+  "numeric_validations": {
+    "user.age": {"operator": "gt", "value": 30},
+    "login_count": {"operator": "le", "value": 5}
+  },
+  "is_uuid_keys": ["user.uuid"],
+  "is_pan_keys": ["user.pan"],
+  "custom_validators": {
+    "user.email": "validate_email_format",
+    "user.phone": "validate_phone_number"
+  },
+  "custom_validator_path": "./custom_validators.py",
+  "skip_keys": ["user_id", "id"]
+}
+```
 
 -----
 
