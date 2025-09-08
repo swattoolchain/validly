@@ -2,41 +2,44 @@
 
 A powerful and extensible data validation and comparison tool designed for developers and testers. Easily integrate into your automation projects to ensure JSON data integrity.
 
+<a name="table-of-contents-anchor"></a>
 ## Table of Contents
 
-- [Installation](#installation)
-- [Available Tools](#available-tools)
-  - [1. JSON Difference (json_difference)](#1-json-difference-json_difference)
-    - [Basic Usage](#basic-usage)
-    - [Advanced Usage with Options](#advanced-usage-with-options)
-    - [List Validation Modes](#list-validation-modes)
-    - [Custom Validators](#custom-validators)
-    - [CLI Usage](#cli-usage)
-  - [2. JSON Filtering (jsonfilter)](#2-json-filtering-jsonfilter)
-    - [Basic Filtering](#basic-filtering)
-    - [Include vs Exclude Filtering](#include-vs-exclude-filtering)
-    - [Wildcard Filtering](#wildcard-filtering)
-    - [Regex-based Filtering](#regex-based-filtering)
-    - [Filtering from Files](#filtering-from-files)
-  - [3. JSON Transformation (json_transform)](#3-json-transformation-json_transform)
-    - [Basic Transformation](#basic-transformation)
-    - [Adding New Fields](#adding-new-fields)
-    - [Custom Transformers](#custom-transformers-1)
-    - [Transforming from Files](#transforming-from-files)
-  - [4. JSON Validation (json_validate)](#4-json-validation-json_validate)
-    - [Basic Validation](#basic-validation)
-    - [Type Validation](#type-validation)
-    - [Format Validation](#format-validation)
-    - [Required Fields Validation](#required-fields-validation)
-    - [Custom Validation](#custom-validation)
-  - [5. OpenAPI Validation (validate_openapi)](#5-openapi-validation-validate_openapi)
-    - [Basic OpenAPI Validation](#basic-openapi-validation)
-    - [Validating Request/Response](#validating-requestresponse)
-    - [OpenAPI Schema Components](#openapi-schema-components)
-    - [Custom OpenAPI Validation](#custom-openapi-validation)
-- [Contributing](#contributing)
-- [License](#license)
+- [Installation](#installation-anchor)
+- [Available Tools](#available-tools-anchor)
+  - [1. JSON Difference (json_difference)](#json-difference-anchor)
+    - [Basic Usage](#basic-usage-anchor)
+    - [Advanced Usage with Options](#advanced-usage-anchor)
+    - [List Validation Modes](#list-validation-modes-anchor)
+    - [Custom Validators](#custom-validators-anchor)
+    - [CLI Usage](#cli-usage-anchor)
+  - [2. JSON Filtering (jsonfilter)](#json-filtering-anchor)
+    - [Basic Filtering](#basic-filtering-anchor)
+    - [Include vs Exclude Filtering](#include-exclude-filtering-anchor)
+    - [Wildcard Filtering](#wildcard-filtering-anchor)
+    - [Regex-based Filtering](#regex-filtering-anchor)
+    - [Key-based Filtering Across All Levels](#key-filtering-anchor)
+    - [Filtering from Files](#filtering-files-anchor)
+  - [3. JSON Transformation (json_transform)](#json-transformation-anchor)
+    - [Basic Transformation](#basic-transformation-anchor)
+    - [Adding New Fields](#adding-fields-anchor)
+    - [Custom Transformers](#custom-transformers-anchor)
+    - [Transforming from Files](#transforming-files-anchor)
+  - [4. JSON Validation (json_validate)](#json-validation-anchor)
+    - [Basic Validation](#basic-validation-anchor)
+    - [Type Validation](#type-validation-anchor)
+    - [Format Validation](#format-validation-anchor)
+    - [Required Fields Validation](#required-fields-anchor)
+    - [Custom Validation](#custom-validation-anchor)
+  - [5. OpenAPI Validation (validate_openapi)](#openapi-validation-anchor)
+    - [Basic OpenAPI Validation](#basic-openapi-anchor)
+    - [Validating Request/Response](#validating-request-anchor)
+    - [OpenAPI Schema Components](#openapi-schema-anchor)
+    - [Custom OpenAPI Validation](#custom-openapi-anchor)
+- [Contributing](#contributing-anchor)
+- [License](#license-anchor)
 
+<a name="features-anchor"></a>
 ## Features
 
   * **Deep, Recursive Comparison**: Validates nested JSON structures seamlessly.
@@ -52,6 +55,7 @@ A powerful and extensible data validation and comparison tool designed for devel
   * **API Contract Validation**: Validate JSON data against API contracts with type checking and format validation.
   * **OpenAPI/Swagger Validation**: Validate JSON data against OpenAPI/Swagger specifications.
 
+<a name="installation-anchor"></a>
 ## Installation
 
 `Validly` is available on PyPI. Install it with `pip`:
@@ -60,12 +64,15 @@ A powerful and extensible data validation and comparison tool designed for devel
 pip install Validly
 ```
 
+<a name="available-tools-anchor"></a>
 ## Available Tools
 
+<a name="json-difference-anchor"></a>
 ### 1. JSON Difference (json_difference)
 
 The `json_difference` function compares two JSON objects and identifies any differences between them.
 
+<a name="basic-usage-anchor"></a>
 #### Basic Usage
 
 Use `json_difference` to compare two JSON objects. It returns a list of failure messages if differences are found.
@@ -91,6 +98,7 @@ differences = json_difference(expected, actual)
 # }
 ```
 
+<a name="advanced-usage-anchor"></a>
 #### Advanced Usage with Options
 
 Pass a dictionary of options to customize the validation behavior.
@@ -161,10 +169,12 @@ differences = json_difference(expected_data, actual_data, options=options)
 # }
 ```
 
+<a name="list-validation-modes-anchor"></a>
 ### **List Validation Modes**
 
 `Validly` offers two ways to compare lists, controlled by the `list_validation_type` option.
 
+<a name="1-unordered-anchor"></a>
 #### **1. Unordered (Default)**
 
 This mode is designed for lists of objects where the order doesn't matter. It intelligently matches objects based on a set of common keys such as `"name"`, `"id"`, and `"qId"`.
@@ -188,6 +198,7 @@ results = json_difference(expected_list, actual_list)
 # { 'result': True, 'errors': [] }
 ```
 
+<a name="2-symmetric-anchor"></a>
 #### **2. Symmetric**
 
 This mode is for lists where the order of items is critical. It performs a direct, index-based comparison.
@@ -216,6 +227,7 @@ results = json_difference(expected_list, actual_list, options=options)
 
 -----
 
+<a name="custom-validators-anchor"></a>
 ### **Custom Validators**
 
 Create a Python file (e.g., `custom_validators.py`) with your custom logic. Your validator methods should accept `expected` and `actual` values and return a `(bool, str)` tuple.
@@ -288,8 +300,10 @@ options = {
 }
 ```
 
+<a name="custom-validator-use-cases-anchor"></a>
 ### **Custom Validator Use Cases**
 
+<a name="1-complex-format-validation-anchor"></a>
 #### **1. Complex Format Validation**
 
 Validate complex formats that aren't covered by built-in validators:
@@ -321,6 +335,7 @@ def validate_credit_card(expected: Any, actual: Any) -> Tuple[bool, str]:
     return False, "Invalid credit card number (failed Luhn check)."
 ```
 
+<a name="2-conditional-validation-anchor"></a>
 #### **2. Conditional Validation**
 
 Validate fields based on the values of other fields:
@@ -346,6 +361,7 @@ def validate_shipping_address(expected: Any, actual: Any) -> Tuple[bool, str]:
     return True, ""
 ```
 
+<a name="3-integration-with-external-services-anchor"></a>
 #### **3. Integration with External Services**
 
 Validate data against external APIs or databases:
@@ -374,6 +390,7 @@ def validate_against_api(expected: Any, actual: Any) -> Tuple[bool, str]:
         return False, f"API validation exception: {str(e)}"
 ```
 
+<a name="cli-usage-anchor"></a>
 ### **CLI Usage**
 
 The `Validly` CLI allows you to perform validations from the command line without writing a Python script, making it ideal for CI/CD pipelines and automated testing.
@@ -409,10 +426,12 @@ python -m Validly expected.json actual.json options.json
 
 -----
 
+<a name="2-json-filtering-anchor"></a>
 ### 2. JSON Filtering (jsonfilter)
 
 Validly provides powerful JSON filtering capabilities through two main functions: `jsonfilter` and `jsonfilter_file`.
 
+<a name="basic-filtering-anchor"></a>
 #### Basic Filtering
 
 Filter JSON data using JSON paths and regex patterns:
@@ -463,6 +482,7 @@ filtered_data = jsonfilter(data, options)
 # }
 ```
 
+<a name="include-vs-exclude-filtering-anchor"></a>
 #### Include vs Exclude Filtering
 
 Choose between including or excluding the matched paths:
@@ -509,6 +529,7 @@ options = {
 # }
 ```
 
+<a name="wildcard-filtering-anchor"></a>
 #### **Wildcard Filtering**
 
 Use wildcards to include multiple fields matching a pattern:
@@ -537,6 +558,7 @@ filtered_data = jsonfilter(data, options)
 # }
 ```
 
+<a name="regex-based-filtering-anchor"></a>
 #### **Regex-based Filtering**
 
 Filter keys that match a regular expression pattern:
@@ -561,6 +583,63 @@ filtered_data = jsonfilter(data, options)
 # }
 ```
 
+<a name="key-based-filtering-across-all-levels-anchor"></a>
+#### **Key-based Filtering Across All Levels**
+
+Filter keys exactly matching specified names at any level in the JSON structure:
+
+```python
+# Filter by exact key names at any level
+options = {
+    "keys": ["id", "email"],
+    "filter_type": "include"  # Only keep matched keys
+}
+
+filtered_data = jsonfilter(data, options)
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234,
+#         "contact": {
+#             "email": "john@example.com"
+#         }
+#     },
+#     "orders": [
+#         {"id": 101},
+#         {"id": 102}
+#     ]
+# }
+
+# Exclude specific keys at any level
+options = {
+    "keys": ["email", "price"],
+    "filter_type": "exclude"  # Remove matched keys
+}
+
+filtered_data = jsonfilter(data, options)
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234,
+#         "name": "John Doe",
+#         "contact": {
+#             "phone": "555-1234"
+#         }
+#     },
+#     "orders": [
+#         {"id": 101, "product": "Laptop"},
+#         {"id": 102, "product": "Mouse"}
+#     ],
+#     "metadata": {
+#         "version": "1.0",
+#         "timestamp": "2025-09-06T06:00:00Z"
+#     }
+# }
+```
+
+<a name="filtering-from-files-anchor"></a>
 #### **Filtering from Files**
 
 Filter JSON data directly from files:
@@ -579,10 +658,12 @@ filtered_data = jsonfilter_file("data.json", options)
 print(filtered_data)
 ```
 
+<a name="3-json-transformation-anchor"></a>
 ### 3. JSON Transformation (json_transform)
 
 Validly provides powerful JSON transformation capabilities through two main functions: `json_transform` and `json_transform_file`.
 
+<a name="basic-transformation-anchor"></a>
 #### Basic Transformation
 
 Transform JSON data using built-in transformation methods:
@@ -624,6 +705,7 @@ transformed_data = json_transform(data, options)
 # }
 ```
 
+<a name="adding-new-fields-anchor"></a>
 #### Adding New Fields
 
 Add new fields to the JSON structure:
@@ -661,6 +743,7 @@ transformed_data = json_transform(data, options)
 # }
 ```
 
+<a name="custom-transformers-anchor"></a>
 #### **Custom Transformers**
 
 Create a Python file with custom transformation functions:
@@ -711,6 +794,7 @@ transformed_data = json_transform(data, options)
 # }
 ```
 
+<a name="transforming-from-files-anchor"></a>
 #### **Transforming from Files**
 
 Transform JSON data directly from files:
@@ -732,10 +816,12 @@ transformed_data = json_transform_file("data.json", options)
 print(transformed_data)
 ```
 
+<a name="4-json-validation-anchor"></a>
 ### 4. JSON Validation (json_validate)
 
 Validly provides a powerful way to validate JSON data against API contracts using the `json_validate` function.
 
+<a name="basic-validation-anchor"></a>
 #### Basic Validation
 
 Validate JSON data against a contract schema:
@@ -779,6 +865,7 @@ result = json_validate(data, contract)
 # }
 ```
 
+<a name="type-validation-anchor"></a>
 #### Type Validation
 
 Validate that fields have the correct data types:
@@ -798,6 +885,7 @@ result = json_validate(data, contract, options)
 
 Supported types include: `string`, `number`, `boolean`, `array`, `object`, and `any`.
 
+<a name="format-validation-anchor"></a>
 #### Format Validation
 
 Validate that fields match specific formats:
@@ -815,6 +903,7 @@ options = {
 result = json_validate(data, contract, options)
 ```
 
+<a name="required-fields-validation-anchor"></a>
 #### Required Fields Validation
 
 Specify fields that must be present in the data:
@@ -832,6 +921,7 @@ options = {
 result = json_validate(data, contract, options)
 ```
 
+<a name="custom-validation-anchor"></a>
 #### Custom Validation
 
 Use custom validators for complex validation logic:
@@ -863,6 +953,7 @@ options = {
 result = json_validate(data, contract, options)
 ```
 
+<a name="strict-mode-anchor"></a>
 #### Strict Mode
 
 Enforce that the data doesn't contain any fields not defined in the contract:
@@ -875,10 +966,12 @@ options = {
 result = json_validate(data, contract, options)
 ```
 
+<a name="5-openapi-validation-anchor"></a>
 ### 5. OpenAPI Validation (validate_openapi)
 
 Validly provides powerful validation against OpenAPI/Swagger specifications using the `validate_openapi` function.
 
+<a name="basic-openapi-validation-anchor"></a>
 #### Basic OpenAPI Validation
 
 Validate JSON data against an OpenAPI schema:
@@ -917,6 +1010,7 @@ result = validate_openapi(data, user_schema)
 # }
 ```
 
+<a name="validating-request-response-anchor"></a>
 #### Validating Request/Response
 
 Validate request or response data against OpenAPI path definitions:
@@ -948,6 +1042,7 @@ response_data = {
 result = validate_openapi(response_data, response_schema)
 ```
 
+<a name="openapi-schema-components-anchor"></a>
 #### OpenAPI Schema Components
 
 The `validate_openapi` function automatically handles OpenAPI schema features:
@@ -1020,6 +1115,7 @@ schema = {
 result = validate_openapi(data, schema)
 ```
 
+<a name="custom-openapi-validation-anchor"></a>
 #### Custom OpenAPI Validation
 
 You can extend OpenAPI validation with custom validators:
@@ -1056,10 +1152,12 @@ options = {
 result = validate_openapi(data, schema, options)
 ```
 
+<a name="contributing-anchor"></a>
 ## Contributing
 
 We welcome contributions! If you have a feature idea or find a bug, please open an issue or submit a pull request on [GitHub](https://github.com/swattoolchain/validly).
 
+<a name="license-anchor"></a>
 ## License
 
 This project is licensed under the MIT License.
