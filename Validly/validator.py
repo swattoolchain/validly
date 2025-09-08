@@ -259,7 +259,10 @@ def jsonfilter(data: Any, options: Dict[str, Any]) -> Any:
         data (Any): The JSON data to filter (as a Python dict/list).
         options (Dict[str, Any]): Filtering options with the following possible keys:
             - jsonpath (List[str]): List of JSON paths to filter (supports wildcards).
-            - regex (str): Filter keys containing this text pattern.
+            - regex (str or List[str]): Filter keys containing this text pattern.
+            - keys (List[str]): List of exact keys to filter across any level in the JSON structure.
+                When used with filter_type="include", only the specified keys will be kept at any level.
+                When used with filter_type="exclude", the specified keys will be removed from all levels.
             - filter_type (str): Either "include" (default) or "exclude" to specify whether to include or exclude the matched paths.
     
     Returns:
@@ -276,6 +279,12 @@ def jsonfilter(data: Any, options: Dict[str, Any]) -> Any:
     if options["filter_type"] not in ["include", "exclude"]:
         raise ValueError("filter_type must be either 'include' or 'exclude'")
     
+    # Special handling for keys option with exclude filter_type
+    keys_list = options.get("keys", [])
+    if keys_list and options["filter_type"] == "exclude":
+        # Use recursive approach to exclude keys at all levels
+        return _recursive_exclude_keys(data, keys_list)
+    
     # Handle different data types
     if isinstance(data, dict):
         return _filter_dict(data, options, "")
@@ -283,6 +292,44 @@ def jsonfilter(data: Any, options: Dict[str, Any]) -> Any:
         return _filter_list(data, options, "")
     else:
         # Primitive types are returned as is
+        return data
+
+
+def _recursive_exclude_keys(data: Any, keys_to_exclude: List[str]) -> Any:
+    """
+    Recursively exclude keys from a JSON structure.
+    
+    Args:
+        data: The data to process
+        keys_to_exclude: List of keys to exclude
+        
+    Returns:
+        The filtered data
+    """
+    if isinstance(data, dict):
+        result = {}
+        for key, value in data.items():
+            if key in keys_to_exclude:
+                continue  # Skip this key
+            
+            # Recursively process nested structures
+            if isinstance(value, (dict, list)):
+                filtered_value = _recursive_exclude_keys(value, keys_to_exclude)
+                result[key] = filtered_value
+            else:
+                result[key] = value
+        return result
+    elif isinstance(data, list):
+        result = []
+        for item in data:
+            if isinstance(item, (dict, list)):
+                filtered_item = _recursive_exclude_keys(item, keys_to_exclude)
+                if filtered_item:  # Only add non-empty items
+                    result.append(filtered_item)
+            else:
+                result.append(item)
+        return result
+    else:
         return data
 
 
@@ -320,10 +367,11 @@ def _filter_dict(data: Dict[str, Any], options: Dict[str, Any], current_path: st
     result = {}
     jsonpaths = options.get("jsonpath", [])
     regex_pattern = options.get("regex")
+    keys_list = options.get("keys", [])
     filter_type = options.get("filter_type", "include")
     
     # If no filtering options provided, return the data as is
-    if not jsonpaths and not regex_pattern:
+    if not jsonpaths and not regex_pattern and not keys_list:
         return data
     
     for key, value in data.items():
@@ -333,8 +381,12 @@ def _filter_dict(data: Dict[str, Any], options: Dict[str, Any], current_path: st
         # Check if this key or its children should be included/excluded
         path_matched = False
         
+        # Check if key is in the keys list (exact match at any level)
+        if keys_list and key in keys_list:
+            path_matched = True
+        
         # Check jsonpath patterns
-        if jsonpaths:
+        if not path_matched and jsonpaths:
             # Direct match with the current path
             if key_path in jsonpaths:
                 path_matched = True
@@ -363,13 +415,27 @@ def _filter_dict(data: Dict[str, Any], options: Dict[str, Any], current_path: st
                     path_matched = True
                     break
         
-        # Check regex pattern
-        if regex_pattern and re.search(regex_pattern, key):
-            path_matched = True
+        # Check regex pattern(s)
+        if not path_matched and regex_pattern:
+            if isinstance(regex_pattern, list):
+                # Handle list of regex patterns
+                for pattern in regex_pattern:
+                    if re.search(pattern, key):
+                        path_matched = True
+                        break
+            else:
+                # Handle single regex pattern
+                if re.search(regex_pattern, key):
+                    path_matched = True
         
         # Determine whether to include this key based on filter_type
         include_key = (path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude")
         
+        # Special handling for exclude with keys option
+        if filter_type == "exclude" and keys_list and key in keys_list:
+            # Skip this key entirely when it's in the exclude keys list
+            continue
+            
         if include_key:
             # For nested structures, recursively filter
             if isinstance(value, dict):
@@ -403,9 +469,10 @@ def _filter_list(data: List[Any], options: Dict[str, Any], current_path: str) ->
     # If no filtering options provided, return the list as is
     jsonpaths = options.get("jsonpath", [])
     regex_pattern = options.get("regex")
+    keys_list = options.get("keys", [])
     filter_type = options.get("filter_type", "include")
     
-    if not jsonpaths and not regex_pattern:
+    if not jsonpaths and not regex_pattern and not keys_list:
         return data
     
     # Check if the entire list path is in the jsonpaths
@@ -429,7 +496,21 @@ def _filter_list(data: List[Any], options: Dict[str, Any], current_path: str) ->
     for i, item in enumerate(data):
         item_path = f"{current_path}[{i}]"
         
+        # For dictionaries, we need to check if any of the keys should be excluded
         if isinstance(item, dict):
+            # Special handling for exclude with keys option
+            if filter_type == "exclude" and keys_list:
+                # Check if any key in the dictionary is in the exclude keys list
+                exclude_item = False
+                for key in item.keys():
+                    if key in keys_list:
+                        exclude_item = True
+                        break
+                        
+                if exclude_item:
+                    # Skip this item if any key should be excluded
+                    continue
+                    
             filtered_item = _filter_dict(item, options, item_path)
             if filtered_item:  # Only add non-empty dictionaries
                 result.append(filtered_item)
@@ -446,9 +527,18 @@ def _filter_list(data: List[Any], options: Dict[str, Any], current_path: str) ->
                     path_matched = True
                     break
             
-            # Check regex pattern for the index (as a string)
-            if regex_pattern and re.search(regex_pattern, str(i)):
-                path_matched = True
+            # Check regex pattern(s) for the index (as a string)
+            if regex_pattern:
+                if isinstance(regex_pattern, list):
+                    # Handle list of regex patterns
+                    for pattern in regex_pattern:
+                        if re.search(pattern, str(i)):
+                            path_matched = True
+                            break
+                else:
+                    # Handle single regex pattern
+                    if re.search(regex_pattern, str(i)):
+                        path_matched = True
             
             # Determine whether to include this item based on filter_type
             include_item = (path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude")
