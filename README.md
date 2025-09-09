@@ -3,57 +3,20 @@
 A powerful and extensible data validation and comparison tool designed for developers and testers. Easily integrate into your automation projects to ensure JSON data integrity.
 
 <a name="table-of-contents-anchor"></a>
-## Table of Contents
+## Features & Documentation
 
-- [Installation](#installation-anchor)
-- [Available Tools](#available-tools-anchor)
-  - [1. JSON Difference (json_difference)](#json-difference-anchor)
-    - [Basic Usage](#basic-usage-anchor)
-    - [Advanced Usage with Options](#advanced-usage-anchor)
-    - [List Validation Modes](#list-validation-modes-anchor)
-    - [Custom Validators](#custom-validators-anchor)
-    - [CLI Usage](#cli-usage-anchor)
-  - [2. JSON Filtering (jsonfilter)](#json-filtering-anchor)
-    - [Basic Filtering](#basic-filtering-anchor)
-    - [Include vs Exclude Filtering](#include-exclude-filtering-anchor)
-    - [Wildcard Filtering](#wildcard-filtering-anchor)
-    - [Regex-based Filtering](#regex-filtering-anchor)
-    - [Key-based Filtering Across All Levels](#key-filtering-anchor)
-    - [Filtering from Files](#filtering-files-anchor)
-  - [3. JSON Transformation (json_transform)](#json-transformation-anchor)
-    - [Basic Transformation](#basic-transformation-anchor)
-    - [Adding New Fields](#adding-fields-anchor)
-    - [Custom Transformers](#custom-transformers-anchor)
-    - [Transforming from Files](#transforming-files-anchor)
-  - [4. JSON Validation (json_validate)](#json-validation-anchor)
-    - [Basic Validation](#basic-validation-anchor)
-    - [Type Validation](#type-validation-anchor)
-    - [Format Validation](#format-validation-anchor)
-    - [Required Fields Validation](#required-fields-anchor)
-    - [Custom Validation](#custom-validation-anchor)
-  - [5. OpenAPI Validation (validate_openapi)](#openapi-validation-anchor)
-    - [Basic OpenAPI Validation](#basic-openapi-anchor)
-    - [Validating Request/Response](#validating-request-anchor)
-    - [OpenAPI Schema Components](#openapi-schema-anchor)
-    - [Custom OpenAPI Validation](#custom-openapi-anchor)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| **JSON Difference** | Deep, recursive comparison of JSON structures with flexible options, order-agnostic lists, domain-specific validations, referencing capabilities, custom validators, numeric comparisons, and wildcard matching. | [json_difference](#1-json-difference-json_difference) |
+| **JSON Filtering** | Filter JSON data based on JSON paths and regex patterns with include/exclude options. | [jsonfilter](#2-json-filtering-jsonfilter) |
+| **JSON Transformation** | Transform JSON data with built-in and custom transformation functions. | [json_transform](#3-json-transformation-json_transform) |
+| **JSON Extension** | Add key-value pairs to JSON data at any level, with support for multiple keys and array operations. | [json_extend](#4-json-extension-json_extend) |
+| **JSON Aggregation** | Aggregate metrics across JSON data with built-in and custom aggregation functions. | [json_aggregate](#5-json-aggregation-json_aggregate) |
+| **JSON Validation** | Validate JSON data against API contracts with type checking and format validation. | [json_validate](#6-json-validation-json_validate) |
+| **OpenAPI Validation** | Validate JSON data against OpenAPI/Swagger specifications. | [validate_openapi](#7-openapi-validation-validate_openapi) |
+
 - [Contributing](#contributing-anchor)
 - [License](#license-anchor)
-
-<a name="features-anchor"></a>
-## Features
-
-  * **Deep, Recursive Comparison**: Validates nested JSON structures seamlessly.
-  * **Flexible Options**: Control validation with a rich set of options for every use case.
-  * **Order-Agnostic Lists**: Intelligently compares lists of objects regardless of their order.
-  * **Domain-Specific Validations**: Built-in checks for common data formats like UUIDs, PAN, and Aadhaar numbers.
-  * **Referencing Capabilities**: Use a dynamic template to compare a field's value to another field in the `actual` JSON.
-  * **Custom Validators**: Extend validation logic with your own Python methods from an external file.
-  * **Numeric Comparisons**: Validate fields with operators like greater than (`gt`), less than (`lt`), and more.
-  * **Wildcard Matching**: Use placeholders to ignore values that are dynamic or unpredictable.
-  * **JSON Filtering**: Filter JSON data based on JSON paths and regex patterns with include/exclude options.
-  * **JSON Transformation**: Transform JSON data with built-in and custom transformation functions.
-  * **API Contract Validation**: Validate JSON data against API contracts with type checking and format validation.
-  * **OpenAPI/Swagger Validation**: Validate JSON data against OpenAPI/Swagger specifications.
 
 <a name="installation-anchor"></a>
 ## Installation
@@ -64,10 +27,7 @@ A powerful and extensible data validation and comparison tool designed for devel
 pip install Validly
 ```
 
-<a name="available-tools-anchor"></a>
-## Available Tools
 
-<a name="json-difference-anchor"></a>
 ### 1. JSON Difference (json_difference)
 
 The `json_difference` function compares two JSON objects and identifies any differences between them.
@@ -426,7 +386,7 @@ python -m Validly expected.json actual.json options.json
 
 -----
 
-<a name="2-json-filtering-anchor"></a>
+<a name="2-json-filtering-updated-anchor"></a>
 ### 2. JSON Filtering (jsonfilter)
 
 Validly provides powerful JSON filtering capabilities through two main functions: `jsonfilter` and `jsonfilter_file`.
@@ -816,8 +776,248 @@ transformed_data = json_transform_file("data.json", options)
 print(transformed_data)
 ```
 
-<a name="4-json-validation-anchor"></a>
-### 4. JSON Validation (json_validate)
+<a name="json-extension-anchor"></a>
+### 4. JSON Extension (json_extend)
+
+Validly provides a powerful way to add keys to JSON data at any level through the `json_extend` and `json_extend_file` functions.
+
+<a name="basic-extension-anchor"></a>
+#### Basic Extension
+
+Add a key-value pair to a JSON object:
+
+```python
+from Validly import json_extend
+
+# Sample data
+data = {
+    "user": {
+        "id": 1234,
+        "name": "John Doe"
+    },
+    "metadata": {
+        "version": "1.0"
+    }
+}
+
+# Add a key to the root level
+extended_data = json_extend(data, "status", "active")
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234,
+#         "name": "John Doe"
+#     },
+#     "metadata": {
+#         "version": "1.0"
+#     },
+#     "status": "active"
+# }
+```
+
+Add multiple keys at once:
+
+```python
+# Add multiple keys at once to the root level
+extended_data = json_extend(data, {
+    "status": "active",
+    "created_at": "2025-09-09",
+    "updated_at": "2025-09-09"
+})
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234,
+#         "name": "John Doe"
+#     },
+#     "metadata": {
+#         "version": "1.0"
+#     },
+#     "status": "active",
+#     "created_at": "2025-09-09",
+#     "updated_at": "2025-09-09"
+# }
+```
+
+<a name="nested-path-extension-anchor"></a>
+#### Nested Path Extension
+
+Add a key-value pair to a nested object using a JSON path:
+
+```python
+# Add a key to a nested object
+extended_data = json_extend(data, "email", "john@example.com", "user")
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234,
+#         "name": "John Doe",
+#         "email": "john@example.com"
+#     },
+#     "metadata": {
+#         "version": "1.0"
+#     }
+# }
+
+# Add multiple keys to a nested object
+extended_data = json_extend(data, {
+    "address": "123 Main St",
+    "city": "New York",
+    "country": "USA"
+}, jsonpath="user")
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234,
+#         "name": "John Doe",
+#         "address": "123 Main St",
+#         "city": "New York",
+#         "country": "USA"
+#     },
+#     "metadata": {
+#         "version": "1.0"
+#     }
+# }
+
+# Add a key to a deeply nested object (creates the path if it doesn't exist)
+extended_data = json_extend(data, "shipping", {"method": "express"}, "user.preferences")
+
+# Result:
+# {
+#     "user": {
+#         "id": 1234,
+#         "name": "John Doe",
+#         "preferences": {
+#             "shipping": {
+#                 "method": "express"
+#             }
+#         }
+#     },
+#     "metadata": {
+#         "version": "1.0"
+#     }
+# }
+```
+
+<a name="array-element-extension-anchor"></a>
+#### Array Element Extension
+
+Add a key-value pair to an array element:
+
+```python
+# Sample data with an array
+data = {
+    "users": [
+        {"id": 1, "name": "John"},
+        {"id": 2, "name": "Jane"}
+    ]
+}
+
+# Add a key to an array element
+extended_data = json_extend(data, "email", "john@example.com", "users[0]")
+
+# Result:
+# {
+#     "users": [
+#         {
+#             "id": 1,
+#             "name": "John",
+#             "email": "john@example.com"
+#         },
+#         {
+#             "id": 2,
+#             "name": "Jane"
+#         }
+#     ]
+# }
+
+# Add a key to the last array element using negative index
+extended_data = json_extend(data, "email", "jane@example.com", "users[-1]")
+
+# Result:
+# {
+#     "users": [
+#         {
+#             "id": 1,
+#             "name": "John"
+#         },
+#         {
+#             "id": 2,
+#             "name": "Jane",
+#             "email": "jane@example.com"
+#         }
+#     ]
+# }
+
+# Add multiple keys to an array element
+extended_data = json_extend(data, {
+    "quantity": 2,
+    "discount": 0.1,
+    "total": 899.99
+}, jsonpath="orders[0]")
+
+# Add a key to a non-existent array element (creates the array and element)
+extended_data = json_extend(data, "name", "Alice", "family[0]")
+
+# Result:
+# {
+#     "users": [
+#         {"id": 1, "name": "John"},
+#         {"id": 2, "name": "Jane"}
+#     ],
+#     "family": [
+#         {"name": "Alice"}
+#     ]
+# }
+
+# Append to a non-existent array using array[-1]
+extended_data = json_extend(data, "name", "Alice", "family[-1]")
+
+# Result is the same as above
+```
+
+<a name="extending-files-anchor"></a>
+#### Extending from Files
+
+Extend JSON data directly from files:
+
+```python
+from Validly import json_extend_file
+
+# Extend JSON from a file with a single key-value pair
+extended_data = json_extend_file("data.json", "status", "active")
+
+# Extend JSON from a file with multiple key-value pairs
+extended_data = json_extend_file("data.json", {
+    "status": "active",
+    "created_at": "2025-09-09",
+    "updated_at": "2025-09-09"
+})
+
+# Extend JSON from a file at a specific path
+extended_data = json_extend_file("data.json", "email", "john@example.com", "user")
+
+# Extend JSON from a file with multiple key-value pairs at a specific path
+extended_data = json_extend_file("data.json", {
+    "address": "123 Main St",
+    "city": "New York",
+    "country": "USA"
+}, jsonpath="user")
+
+# Extend JSON from a file with array indices, including negative indices
+extended_data = json_extend_file("data.json", "email", "john@example.com", "users[0]")
+extended_data = json_extend_file("data.json", "email", "jane@example.com", "users[-1]")
+
+# Process the extended data
+print(extended_data)
+```
+
+<a name="6-json-validation-anchor"></a>
+### 6. JSON Validation (json_validate)
 
 Validly provides a powerful way to validate JSON data against API contracts using the `json_validate` function.
 
@@ -966,8 +1166,8 @@ options = {
 result = json_validate(data, contract, options)
 ```
 
-<a name="5-openapi-validation-anchor"></a>
-### 5. OpenAPI Validation (validate_openapi)
+<a name="7-openapi-validation-anchor"></a>
+### 7. OpenAPI Validation (validate_openapi)
 
 Validly provides powerful validation against OpenAPI/Swagger specifications using the `validate_openapi` function.
 
@@ -1160,4 +1360,228 @@ We welcome contributions! If you have a feature idea or find a bug, please open 
 <a name="license-anchor"></a>
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License.<a name="json-aggregation-anchor"></a>
+### 5. JSON Aggregation (json_aggregate)
+
+Validly provides a powerful way to aggregate metrics across JSON data through the `json_aggregate` and `json_aggregate_file` functions.
+
+<a name="basic-aggregation-anchor"></a>
+#### Basic Aggregation
+
+Aggregate metrics from JSON data based on a field name:
+
+```python
+from Validly import json_aggregate
+
+# Sample data
+data = {
+    "metrics": [
+        {"name": "CPU", "value": 75.5, "unit": "%"},
+        {"name": "Memory", "value": 60.2, "unit": "%"},
+        {"name": "Disk", "value": 85.0, "unit": "%"}
+    ],
+    "servers": [
+        {
+            "id": "srv-001",
+            "name": "Web Server",
+            "metrics": [
+                {"name": "CPU", "value": 80.0, "unit": "%"},
+                {"name": "Memory", "value": 70.5, "unit": "%"},
+                {"name": "Requests", "value": 1500, "unit": "req/s"}
+            ]
+        }
+    ]
+}
+
+# Sum all "value" fields across the entire JSON
+result = json_aggregate(data, "value", "sum")
+
+# Result: 1871.2
+```
+
+You can also specify a JSON path to aggregate metrics from a specific part of the JSON:
+
+```python
+# Average of "value" fields in root metrics only
+result = json_aggregate(data, "value", "avg", "metrics")
+
+# Result: 73.56666666666666
+```
+
+<a name="multiple-aggregations-anchor"></a>
+#### Multiple Aggregations
+
+Perform multiple aggregations at once:
+
+```python
+# Multiple aggregations at once
+result = json_aggregate(data, "value", {
+    "combine": ["sum", "avg", "min", "max", "count"]
+})
+
+# Result:
+# {
+#     "sum": 1871.2,
+#     "avg": 73.56666666666666,
+#     "min": 60.2,
+#     "max": 1500,
+#     "count": 6
+# }
+```
+
+<a name="statistical-aggregations-anchor"></a>
+#### Statistical Aggregations
+
+Perform statistical aggregations:
+
+```python
+# Statistical aggregations
+result = json_aggregate(data, "value", {
+    "combine": ["median", "stdev", "variance", "range"]
+})
+
+# Result:
+# {
+#     "median": 77.75,
+#     "stdev": 583.2,
+#     "variance": 340000.0,
+#     "range": 1439.8
+# }
+```
+
+Supported aggregation functions:
+- `sum`: Sum of all values
+- `avg`, `average`, `mean`: Average of all values
+- `min`: Minimum value
+- `max`: Maximum value
+- `count`: Count of all values
+- `median`: Median value
+- `mode`: Most frequent value(s)
+- `stdev`, `std`: Standard deviation
+- `variance`, `var`: Variance
+- `range`: Range (max - min)
+- `first`: First value
+- `last`: Last value
+- `unique`, `distinct`: List of unique values
+- `unique_count`, `distinct_count`: Count of unique values
+
+<a name="custom-aggregations-anchor"></a>
+#### Custom Aggregations
+
+Create a Python file with custom aggregation functions:
+
+```python
+# custom_aggregators.py
+def weighted_average(values, args, root_data):
+    """Calculate weighted average of values."""
+    weights = args.get("weights", [1.0] * len(values))
+    if len(weights) < len(values):
+        weights = weights + [1.0] * (len(values) - len(weights))
+    
+    weighted_sum = sum(v * w for v, w in zip(values, weights))
+    total_weight = sum(weights[:len(values)])
+    
+    return weighted_sum / total_weight if total_weight > 0 else None
+
+def percentile(values, args, root_data):
+    """Calculate percentile of values."""
+    p = args.get("p", 50)  # Default to median (50th percentile)
+    
+    if not values:
+        return None
+    
+    # Filter numeric values
+    numeric_values = [v for v in values if isinstance(v, (int, float))]
+    if not numeric_values:
+        return None
+    
+    # Sort values
+    sorted_values = sorted(numeric_values)
+    n = len(sorted_values)
+    
+    # Calculate percentile
+    if p <= 0:
+        return sorted_values[0]
+    if p >= 100:
+        return sorted_values[-1]
+    
+    # Calculate index
+    idx = (n - 1) * p / 100
+    idx_floor = int(idx)
+    idx_ceil = idx_floor + 1 if idx_floor < n - 1 else idx_floor
+    
+    # Interpolate
+    if idx_floor == idx_ceil:
+        return sorted_values[idx_floor]
+    else:
+        return sorted_values[idx_floor] * (idx_ceil - idx) + sorted_values[idx_ceil] * (idx - idx_floor)
+```
+
+Then use these custom aggregators in your code:
+
+```python
+# Custom aggregation
+result = json_aggregate(data, "value", {
+    "custom_aggregation_path": "custom_aggregators.py",
+    "function": "weighted_average",
+    "args": {
+        "weights": [2.0, 1.0, 1.5, 0.5, 1.0]
+    }
+})
+
+# Result: 559.6461538461538
+```
+
+You can also combine built-in and custom aggregations:
+
+```python
+# Combining built-in and custom aggregations
+result = json_aggregate(data, "value", {
+    "combine": [
+        "avg",
+        "median",
+        {
+            "name": "weighted_average",
+            "args": {
+                "weights": [2.0, 1.0, 1.5, 0.5, 1.0]
+            }
+        },
+        {
+            "name": "percentile",
+            "args": {
+                "p": 75
+            }
+        }
+    ],
+    "custom_aggregation_path": "custom_aggregators.py",
+    "function": "dummy"  # This is needed but won't be used for combine mode
+})
+
+# Result:
+# {
+#     "avg": 73.56666666666666,
+#     "median": 77.75,
+#     "weighted_average": 559.6461538461538,
+#     "percentile": 91.525
+# }
+```
+
+<a name="aggregating-files-anchor"></a>
+#### Aggregating from Files
+
+Aggregate metrics directly from JSON files:
+
+```python
+from Validly import json_aggregate_file
+
+# Aggregate metrics from a file
+result = json_aggregate_file("data.json", "value", "sum")
+
+# Aggregate metrics from a file with multiple aggregations
+result = json_aggregate_file("data.json", "value", {
+    "combine": ["sum", "avg", "min", "max", "count"]
+})
+
+# Process the aggregated results
+print(result)
+```
