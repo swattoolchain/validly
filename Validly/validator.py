@@ -2,7 +2,7 @@ import json
 import os
 import sys
 import importlib.util
-from typing import Any, Dict, List, Optional, Tuple, Union, Callable
+from typing import Any, Dict, List, Optional, Tuple, Callable, Union
 import re
 from pathlib import Path
 
@@ -1432,3 +1432,504 @@ def _apply_transform(value: Any, path: str, options: Dict[str, Any], root_data: 
                 raise ValueError(f"Error applying custom transformer '{method_name}': {e}")
     
     return value
+
+
+# ==============================================================================
+# JSON Extend Functions
+# ==============================================================================
+
+def json_extend(data: Any, key: Union[str, Dict[str, Any]], value: Any = None, jsonpath: str = "") -> Any:
+    """
+    Adds key-value pair(s) to a JSON object at the specified jsonpath.
+    
+    Args:
+        data (Any): The JSON data to extend (as a Python dict/list).
+        key (Union[str, Dict[str, Any]]): The key to add, or a dictionary of key-value pairs to add.
+        value (Any, optional): The value to add for the key. Not used if key is a dictionary.
+        jsonpath (str, optional): The JSON path where the key(s) should be added. 
+                                 If empty, the key(s) are added to the root level.
+    
+    Returns:
+        Any: The extended JSON data.
+    """
+    # Make a deep copy of the data to avoid modifying the original
+    if isinstance(data, dict):
+        result = {k: v for k, v in data.items()}
+    elif isinstance(data, list):
+        result = [item for item in data]
+    else:
+        # If data is not a dict or list, we can't extend it
+        raise ValueError("Data must be a dictionary or list to extend")
+    
+    # Handle dictionary of key-value pairs
+    if isinstance(key, dict):
+        # If key is a dictionary, we add all key-value pairs
+        if not jsonpath:
+            if isinstance(result, dict):
+                for k, v in key.items():
+                    result[k] = v
+                return result
+            else:  # result is a list
+                raise ValueError("Cannot add key-value pairs to a list without a jsonpath")
+        else:
+            # Add each key-value pair to the specified jsonpath
+            extended_result = result
+            for k, v in key.items():
+                extended_result = _json_extend_single(extended_result, k, v, jsonpath)
+            return extended_result
+    
+    # If no jsonpath is provided, add the single key-value pair to the root level
+    if not jsonpath:
+        if isinstance(result, dict):
+            result[key] = value
+        else:  # result is a list
+            raise ValueError("Cannot add a key-value pair to a list without a jsonpath")
+        return result
+    
+    # For a single key-value pair with a jsonpath, use the helper function
+    return _json_extend_single(result, key, value, jsonpath)
+
+
+def _json_extend_single(data: Any, key: str, value: Any, jsonpath: str) -> Any:
+    """
+    Helper function to add a single key-value pair to a JSON object at the specified jsonpath.
+    
+    Args:
+        data (Any): The JSON data to extend.
+        key (str): The key to add.
+        value (Any): The value to add for the key.
+        jsonpath (str): The JSON path where the key should be added.
+    
+    Returns:
+        Any: The extended JSON data.
+    """
+    # Make a deep copy of the data to avoid modifying the original
+    if isinstance(data, dict):
+        result = {k: v for k, v in data.items()}
+    elif isinstance(data, list):
+        result = [item for item in data]
+    else:
+        # If data is not a dict or list, we can't extend it
+        raise ValueError("Data must be a dictionary or list to extend")
+    
+    # Parse the jsonpath to find the target location
+    path_parts = jsonpath.split('.')
+    
+    # Navigate to the target location
+    target = result
+    
+    for i, part in enumerate(path_parts):
+        # Check if this is the last part of the path
+        is_last = i == len(path_parts) - 1
+        
+        # Handle array indices in the path (e.g., "users[0]" or "users[-1]")
+        match = re.match(r'(.+)\[([-\d]+)\]$', part)
+        if match:
+            array_name, index_str = match.groups()
+            index = int(index_str)
+            
+            # Ensure the parent has the array
+            if array_name not in target:
+                target[array_name] = []
+            
+            # Handle negative indices (e.g., array[-1] for the last element)
+            if index < 0:
+                # If the array is empty or the negative index is out of bounds,
+                # we'll append a new element
+                if len(target[array_name]) == 0 or abs(index) > len(target[array_name]):
+                    target[array_name].append({} if is_last else {})
+                    index = len(target[array_name]) - 1
+                else:
+                    # Convert negative index to positive index
+                    index = len(target[array_name]) + index
+            else:
+                # Ensure the array is long enough for positive indices
+                while len(target[array_name]) <= index:
+                    target[array_name].append({} if is_last else {})
+            
+            # If this is the last part, add the key-value pair to the array element
+            if is_last:
+                target[array_name][index][key] = value
+                return result
+            else:
+                target = target[array_name][index]
+        else:
+            # Regular object property
+            if part not in target:
+                target[part] = {}
+            
+            # If this is the last part, add the key-value pair to the object
+            if is_last:
+                target[part][key] = value
+                return result
+            else:
+                target = target[part]
+    
+    # This should not be reached if the path is valid
+    return result
+
+
+def json_extend_file(file_path: str, key: Union[str, Dict[str, Any]], value: Any = None, jsonpath: str = "") -> Any:
+    """
+    Reads a JSON file, extends it with key-value pair(s), and returns the extended data.
+    
+    Args:
+        file_path (str): Path to the JSON file.
+        key (Union[str, Dict[str, Any]]): The key to add, or a dictionary of key-value pairs to add.
+        value (Any, optional): The value to add for the key. Not used if key is a dictionary.
+        jsonpath (str, optional): The JSON path where the key(s) should be added.
+                                 If empty, the key(s) are added to the root level.
+    
+    Returns:
+        Any: The extended JSON data.
+    """
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+    
+    return json_extend(data, key, value, jsonpath)# ==============================================================================
+# JSON Aggregation Functions
+# ==============================================================================
+
+def json_aggregate(data: Any, field_name: str, aggregation: Union[str, Dict[str, Any]], jsonpath: str = "") -> Any:
+    """
+    Aggregates metrics across JSON data based on a field name.
+    
+    Args:
+        data (Any): The JSON data to aggregate metrics from (as a Python dict/list).
+        field_name (str): The field name to aggregate metrics for.
+        aggregation (Union[str, Dict[str, Any]]): The aggregation function to use.
+            Can be a string (e.g., "sum", "avg", "min", "max", "count") or a dictionary
+            with custom aggregation options.
+        jsonpath (str, optional): The JSON path where to start the aggregation from.
+                                 If empty, aggregation starts from the root level.
+    
+    Returns:
+        Any: The aggregation result.
+    """
+    # Extract values to aggregate based on field_name and jsonpath
+    values = _extract_values(data, field_name, jsonpath)
+    
+    # Perform the aggregation
+    if isinstance(aggregation, str):
+        return _apply_builtin_aggregation(values, aggregation)
+    else:
+        return _apply_custom_aggregation(values, aggregation, data)
+
+
+def _extract_values(data: Any, field_name: str, jsonpath: str = "") -> List[Any]:
+    """
+    Extracts values from JSON data based on field name and jsonpath.
+    
+    Args:
+        data (Any): The JSON data to extract values from.
+        field_name (str): The field name to extract values for.
+        jsonpath (str, optional): The JSON path where to start the extraction from.
+    
+    Returns:
+        List[Any]: List of extracted values.
+    """
+    values = []
+    
+    # If jsonpath is provided, navigate to that location first
+    if jsonpath:
+        data = _navigate_to_jsonpath(data, jsonpath)
+        if data is None:
+            return values
+    
+    # Extract values recursively
+    _extract_values_recursive(data, field_name, values)
+    
+    return values
+
+
+def _navigate_to_jsonpath(data: Any, jsonpath: str) -> Any:
+    """
+    Navigates to a specific location in the JSON data based on jsonpath.
+    
+    Args:
+        data (Any): The JSON data to navigate in.
+        jsonpath (str): The JSON path to navigate to.
+    
+    Returns:
+        Any: The data at the specified jsonpath, or None if not found.
+    """
+    if not jsonpath:
+        return data
+    
+    path_parts = jsonpath.split('.')
+    current = data
+    
+    for part in path_parts:
+        # Handle array indices in the path (e.g., "users[0]")
+        match = re.match(r'(.+)\[([-\d]+)\]$', part)
+        if match:
+            array_name, index_str = match.groups()
+            index = int(index_str)
+            
+            if not isinstance(current, dict) or array_name not in current:
+                return None
+            
+            array_data = current[array_name]
+            if not isinstance(array_data, list):
+                return None
+            
+            # Handle negative indices
+            if index < 0:
+                if abs(index) > len(array_data):
+                    return None
+                current = array_data[index]
+            else:
+                if index >= len(array_data):
+                    return None
+                current = array_data[index]
+        else:
+            # Regular object property
+            if not isinstance(current, dict) or part not in current:
+                return None
+            current = current[part]
+    
+    return current
+
+
+def _extract_values_recursive(data: Any, field_name: str, values: List[Any]) -> None:
+    """
+    Recursively extracts values from JSON data based on field name.
+    
+    Args:
+        data (Any): The JSON data to extract values from.
+        field_name (str): The field name to extract values for.
+        values (List[Any]): List to append extracted values to.
+    """
+    if isinstance(data, dict):
+        # Check if this dict contains the field_name
+        if field_name in data:
+            values.append(data[field_name])
+        
+        # Recursively check all values in the dict
+        for value in data.values():
+            _extract_values_recursive(value, field_name, values)
+    
+    elif isinstance(data, list):
+        # Recursively check all items in the list
+        for item in data:
+            _extract_values_recursive(item, field_name, values)
+
+
+def _apply_builtin_aggregation(values: List[Any], aggregation: str) -> Any:
+    """
+    Applies a built-in aggregation function to a list of values.
+    
+    Args:
+        values (List[Any]): List of values to aggregate.
+        aggregation (str): The aggregation function to apply.
+    
+    Returns:
+        Any: The aggregation result.
+    """
+    # Filter out non-numeric values for numeric aggregations
+    numeric_values = [v for v in values if isinstance(v, (int, float))]
+    
+    if not values:
+        return None
+    
+    if aggregation.lower() == "sum":
+        return sum(numeric_values) if numeric_values else None
+    
+    elif aggregation.lower() == "avg" or aggregation.lower() == "average" or aggregation.lower() == "mean":
+        return sum(numeric_values) / len(numeric_values) if numeric_values else None
+    
+    elif aggregation.lower() == "min":
+        return min(numeric_values) if numeric_values else None
+    
+    elif aggregation.lower() == "max":
+        return max(numeric_values) if numeric_values else None
+    
+    elif aggregation.lower() == "count":
+        return len(values)
+    
+    elif aggregation.lower() == "median":
+        if not numeric_values:
+            return None
+        sorted_values = sorted(numeric_values)
+        n = len(sorted_values)
+        if n % 2 == 0:
+            return (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
+        else:
+            return sorted_values[n//2]
+    
+    elif aggregation.lower() == "mode":
+        if not values:
+            return None
+        # Count occurrences of each value
+        counter = {}
+        for v in values:
+            if v in counter:
+                counter[v] += 1
+            else:
+                counter[v] = 1
+        # Find the value(s) with the highest count
+        max_count = max(counter.values())
+        modes = [k for k, v in counter.items() if v == max_count]
+        return modes[0] if len(modes) == 1 else modes
+    
+    elif aggregation.lower() == "stdev" or aggregation.lower() == "std":
+        if not numeric_values or len(numeric_values) < 2:
+            return None
+        mean = sum(numeric_values) / len(numeric_values)
+        variance = sum((x - mean) ** 2 for x in numeric_values) / len(numeric_values)
+        return variance ** 0.5
+    
+    elif aggregation.lower() == "variance" or aggregation.lower() == "var":
+        if not numeric_values or len(numeric_values) < 2:
+            return None
+        mean = sum(numeric_values) / len(numeric_values)
+        return sum((x - mean) ** 2 for x in numeric_values) / len(numeric_values)
+    
+    elif aggregation.lower() == "range":
+        if not numeric_values:
+            return None
+        return max(numeric_values) - min(numeric_values)
+    
+    elif aggregation.lower() == "first":
+        return values[0] if values else None
+    
+    elif aggregation.lower() == "last":
+        return values[-1] if values else None
+    
+    elif aggregation.lower() == "unique" or aggregation.lower() == "distinct":
+        return list(set(values))
+    
+    elif aggregation.lower() == "unique_count" or aggregation.lower() == "distinct_count":
+        return len(set(values))
+    
+    else:
+        raise ValueError(f"Unknown aggregation function: {aggregation}")
+
+
+def _apply_custom_aggregation(values: List[Any], options: Dict[str, Any], root_data: Any) -> Any:
+    """
+    Applies a custom aggregation function to a list of values.
+    
+    Args:
+        values (List[Any]): List of values to aggregate.
+        options (Dict[str, Any]): Options for the custom aggregation.
+        root_data (Any): The original JSON data.
+    
+    Returns:
+        Any: The aggregation result.
+    """
+    # Apply a combination of built-in aggregations
+    if "combine" in options:
+        combine_funcs = options["combine"]
+        if not isinstance(combine_funcs, list):
+            raise ValueError("'combine' must be a list of aggregation functions")
+        
+        results = {}
+        for func in combine_funcs:
+            if isinstance(func, str):
+                results[func] = _apply_builtin_aggregation(values, func)
+            elif isinstance(func, dict) and "name" in func:
+                name = func["name"]
+                args = func.get("args", {})
+                if "custom_aggregation_path" in options and name not in ["sum", "avg", "average", "mean", "min", "max", "count", "median", "mode", "stdev", "std", "variance", "var", "range", "first", "last", "unique", "distinct", "unique_count", "distinct_count"]:
+                    # Apply custom aggregation with specific args
+                    file_path = options["custom_aggregation_path"]
+                    aggregators = _load_custom_aggregators(file_path)
+                    if name not in aggregators:
+                        raise ValueError(f"Custom aggregation function '{name}' not found")
+                    results[name] = aggregators[name](values, args, root_data)
+                else:
+                    # Apply built-in aggregation
+                    results[name] = _apply_builtin_aggregation(values, name)
+        
+        return results
+    
+    # Check if a custom aggregation function path is provided
+    elif "custom_aggregation_path" in options:
+        file_path = options["custom_aggregation_path"]
+        aggregators = _load_custom_aggregators(file_path)
+        
+        # Get the aggregation function name
+        function_name = options.get("function", "")
+        if not function_name or function_name not in aggregators:
+            raise ValueError(f"Custom aggregation function '{function_name}' not found")
+        
+        # Apply the custom aggregation function
+        args = options.get("args", {})
+        return aggregators[function_name](values, args, root_data)
+    
+    # Apply a combination of built-in aggregations
+    elif "combine" in options:
+        combine_funcs = options["combine"]
+        if not isinstance(combine_funcs, list):
+            raise ValueError("'combine' must be a list of aggregation functions")
+        
+        results = {}
+        for func in combine_funcs:
+            if isinstance(func, str):
+                results[func] = _apply_builtin_aggregation(values, func)
+            elif isinstance(func, dict) and "name" in func:
+                name = func["name"]
+                args = func.get("args", {})
+                if "custom_aggregation_path" in options:
+                    # Apply custom aggregation with specific args
+                    file_path = options["custom_aggregation_path"]
+                    aggregators = _load_custom_aggregators(file_path)
+                    if name not in aggregators:
+                        raise ValueError(f"Custom aggregation function '{name}' not found")
+                    results[name] = aggregators[name](values, args, root_data)
+                else:
+                    # Apply built-in aggregation
+                    results[name] = _apply_builtin_aggregation(values, name)
+        
+        return results
+    
+    else:
+        raise ValueError("Invalid custom aggregation options")
+
+
+def _load_custom_aggregators(file_path: str) -> Dict[str, Callable]:
+    """
+    Safely loads a Python module from a given file path and returns its
+    callable methods. This prevents the security risks associated with eval().
+    
+    Args:
+        file_path (str): Path to the Python file with custom aggregator functions.
+    
+    Returns:
+        Dict[str, Callable]: Dictionary of function names to callable functions.
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Custom aggregator file not found at: {file_path}")
+
+    spec = importlib.util.spec_from_file_location("custom_aggregators_module", file_path)
+    if spec is None:
+        raise ImportError(f"Could not load module specification from {file_path}")
+        
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["custom_aggregators_module"] = module
+    spec.loader.exec_module(module)
+    
+    aggregators = {
+        name: func for name, func in module.__dict__.items() if callable(func)
+    }
+    return aggregators
+
+
+def json_aggregate_file(file_path: str, field_name: str, aggregation: Union[str, Dict[str, Any]], jsonpath: str = "") -> Any:
+    """
+    Reads a JSON file and aggregates metrics based on a field name.
+    
+    Args:
+        file_path (str): Path to the JSON file.
+        field_name (str): The field name to aggregate metrics for.
+        aggregation (Union[str, Dict[str, Any]]): The aggregation function to use.
+        jsonpath (str, optional): The JSON path where to start the aggregation from.
+    
+    Returns:
+        Any: The aggregation result.
+    """
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+    
+    return json_aggregate(data, field_name, aggregation, jsonpath)
