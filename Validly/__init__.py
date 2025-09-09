@@ -1,1 +1,1 @@
-from .validator import json_difference, jsonfilter, jsonfilter_file, json_transform, json_transform_file, json_validate, validate_openapi, validate_openapi_file, validate_openapi_url, load_openapi_schema
+from .validator import json_difference, jsonfilter, jsonfilter_file, json_transform, json_transform_file, json_validate, validate_openapi, validate_openapi_file, validate_openapi_url, load_openapi_schema, json_extend, json_extend_file, json_aggregate, json_aggregate_file
