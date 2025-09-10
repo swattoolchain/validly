@@ -7,16 +7,16 @@ A powerful and extensible data validation and comparison tool designed for devel
 
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| **JSON Difference** | Deep, recursive comparison of JSON structures with flexible options, order-agnostic lists, domain-specific validations, referencing capabilities, custom validators, numeric comparisons, and wildcard matching. | [json_difference](#1-json-difference-json_difference) |
-| **JSON Filtering** | Filter JSON data based on JSON paths and regex patterns with include/exclude options. | [jsonfilter](#2-json-filtering-jsonfilter) |
-| **JSON Transformation** | Transform JSON data with built-in and custom transformation functions. | [json_transform](#3-json-transformation-json_transform) |
-| **JSON Extension** | Add key-value pairs to JSON data at any level, with support for multiple keys and array operations. | [json_extend](#4-json-extension-json_extend) |
-| **JSON Aggregation** | Aggregate metrics across JSON data with built-in and custom aggregation functions. | [json_aggregate](#5-json-aggregation-json_aggregate) |
-| **JSON Validation** | Validate JSON data against API contracts with type checking and format validation. | [json_validate](#6-json-validation-json_validate) |
-| **OpenAPI Validation** | Validate JSON data against OpenAPI/Swagger specifications. | [validate_openapi](#7-openapi-validation-validate_openapi) |
+| **JSON Difference** | Deep, recursive comparison of JSON structures with flexible options, order-agnostic lists, domain-specific validations, referencing capabilities, custom validators, numeric comparisons, and wildcard matching. | [json_difference](#json-difference) |
+| **JSON Filtering** | Filter JSON data based on JSON paths and regex patterns with include/exclude options. | [jsonfilter](#json-filtering) |
+| **JSON Transformation** | Transform JSON data with built-in and custom transformation functions. | [json_transform](#json-transformation) |
+| **JSON Extension** | Add key-value pairs to JSON data at any level, with support for multiple keys and array operations. | [json_extend](#json-extension) |
+| **JSON Aggregation** | Aggregate metrics across JSON data with built-in and custom aggregation functions. | [json_aggregate](#json-aggregation) |
+| **JSON Validation** | Validate JSON data against API contracts with type checking and format validation. | [json_validate](#json-validation) |
+| **OpenAPI Validation** | Validate JSON data against OpenAPI/Swagger specifications. | [validate_openapi](#openapi-validation) |
 
-- [Contributing](#contributing-anchor)
-- [License](#license-anchor)
+- [Contributing](#user-content-contributing)
+- [License](#user-content-license)
 
 <a name="installation-anchor"></a>
 ## Installation
@@ -28,7 +28,7 @@ pip install Validly
 ```
 
 
-### 1. JSON Difference (json_difference)
+<h3 id="json-difference">1. JSON Difference (json_difference)</h3>
 
 The `json_difference` function compares two JSON objects and identifies any differences between them.
 
@@ -386,8 +386,7 @@ python -m Validly expected.json actual.json options.json
 
 -----
 
-<a name="2-json-filtering-updated-anchor"></a>
-### 2. JSON Filtering (jsonfilter)
+<h3 id="json-filtering">2. JSON Filtering (jsonfilter)</h3>
 
 Validly provides powerful JSON filtering capabilities through two main functions: `jsonfilter` and `jsonfilter_file`.
 
@@ -618,8 +617,7 @@ filtered_data = jsonfilter_file("data.json", options)
 print(filtered_data)
 ```
 
-<a name="3-json-transformation-anchor"></a>
-### 3. JSON Transformation (json_transform)
+<h3 id="json-transformation">3. JSON Transformation (json_transform)</h3>
 
 Validly provides powerful JSON transformation capabilities through two main functions: `json_transform` and `json_transform_file`.
 
@@ -776,8 +774,7 @@ transformed_data = json_transform_file("data.json", options)
 print(transformed_data)
 ```
 
-<a name="json-extension-anchor"></a>
-### 4. JSON Extension (json_extend)
+<h3 id="json-extension">4. JSON Extension (json_extend)</h3>
 
 Validly provides a powerful way to add keys to JSON data at any level through the `json_extend` and `json_extend_file` functions.
 
@@ -1016,8 +1013,7 @@ extended_data = json_extend_file("data.json", "email", "jane@example.com", "user
 print(extended_data)
 ```
 
-<a name="6-json-validation-anchor"></a>
-### 6. JSON Validation (json_validate)
+<h3 id="json-validation">6. JSON Validation (json_validate)</h3>
 
 Validly provides a powerful way to validate JSON data against API contracts using the `json_validate` function.
 
@@ -1166,8 +1162,7 @@ options = {
 result = json_validate(data, contract, options)
 ```
 
-<a name="7-openapi-validation-anchor"></a>
-### 7. OpenAPI Validation (validate_openapi)
+<h3 id="openapi-validation">7. OpenAPI Validation (validate_openapi)</h3>
 
 Validly provides powerful validation against OpenAPI/Swagger specifications using the `validate_openapi` function.
 
@@ -1352,16 +1347,15 @@ options = {
 result = validate_openapi(data, schema, options)
 ```
 
-<a name="contributing-anchor"></a>
-## Contributing
+<h2 id="contributing">Contributing</h2>
 
 We welcome contributions! If you have a feature idea or find a bug, please open an issue or submit a pull request on [GitHub](https://github.com/swattoolchain/validly).
 
-<a name="license-anchor"></a>
-## License
+<h2 id="license">License</h2>
 
-This project is licensed under the MIT License.<a name="json-aggregation-anchor"></a>
-### 5. JSON Aggregation (json_aggregate)
+This project is licensed under the MIT License.
+
+<h3 id="json-aggregation">5. JSON Aggregation (json_aggregate)</h3>
 
 Validly provides a powerful way to aggregate metrics across JSON data through the `json_aggregate` and `json_aggregate_file` functions.
 
