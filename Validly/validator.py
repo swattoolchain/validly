@@ -1138,6 +1138,13 @@ def json_validate(data: Any, contract: Dict[str, Any], options: Optional[Dict[st
                 _add_error(field_name, path, f"Regex mismatch: expected pattern '{regex_pattern}', got '{data_value}'")
             return
         
+        # Check enum validations
+        if options.get("enum_validations", {}).get(path):
+            allowed_values = options["enum_validations"][path]
+            if data_value not in allowed_values:
+                _add_error(field_name, path, f"Enum validation failed: Value '{data_value}' is not in allowed values: {allowed_values}")
+            return
+            
         # Check numeric validations
         if options.get("numeric_validations", {}).get(path):
             rule = options["numeric_validations"][path]
