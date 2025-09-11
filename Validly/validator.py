@@ -251,6 +251,134 @@ def json_difference(
 # JSON Filtering Functions
 # ==============================================================================
 
+def _should_keep_value(key: str, value: Any, value_filters: Dict[str, Any]) -> bool:
+    """
+    Determines if a key-value pair should be kept based on value filters.
+    
+    Args:
+        key (str): The key of the key-value pair.
+        value (Any): The value to check.
+        value_filters (Dict[str, Any]): Value-based filters to apply.
+        
+    Returns:
+        bool: True if the key-value pair should be kept, False if it should be filtered out.
+    """
+    if not value_filters:
+        return True
+    
+    # Check for null values
+    if value_filters.get("null_values", False) and value is None:
+        return False
+    
+    # Check for empty strings
+    if value_filters.get("empty_strings", False) and value == "":
+        return False
+    
+    # Check conditions
+    conditions = value_filters.get("conditions", [])
+    for condition in conditions:
+        condition_key = condition.get("key", "*")
+        operator = condition.get("operator")
+        condition_value = condition.get("value")
+        
+        # Skip if this condition doesn't apply to this key
+        if condition_key != "*" and condition_key != key:
+            continue
+            
+        # Skip if we don't have a valid operator or value
+        if not operator or condition_value is None:
+            continue
+        
+        # Apply the condition based on the operator
+        try:
+            # Array operators
+            if isinstance(value, list):
+                if operator == "contains" and condition_value in value:
+                    return False
+                elif operator == "not_contains" and condition_value not in value:
+                    return False
+                elif operator == "empty" and len(value) == 0 and condition_value is True:
+                    return False
+                elif operator == "not_empty" and len(value) > 0 and condition_value is True:
+                    return False
+                elif operator == "length_eq" and len(value) == condition_value:
+                    return False
+                elif operator == "length_gt" and len(value) > condition_value:
+                    return False
+                elif operator == "length_lt" and len(value) < condition_value:
+                    return False
+                elif operator == "length_ge" and len(value) >= condition_value:
+                    return False
+                elif operator == "length_le" and len(value) <= condition_value:
+                    return False
+                # Skip other operators for arrays
+                continue
+                
+            # Dictionary key check operators
+            if isinstance(value, dict):
+                if operator == "has_key" and condition_value in value:
+                    return False
+                elif operator == "not_has_key" and condition_value not in value:
+                    return False
+                elif operator == "empty" and len(value) == 0 and condition_value is True:
+                    return False
+                elif operator == "not_empty" and len(value) > 0 and condition_value is True:
+                    return False
+                elif operator == "keys_contain" and any(k.find(condition_value) >= 0 for k in value.keys()):
+                    return False
+                elif operator == "keys_not_contain" and not any(k.find(condition_value) >= 0 for k in value.keys()):
+                    return False
+                elif operator == "keys_count_eq" and len(value) == condition_value:
+                    return False
+                elif operator == "keys_count_gt" and len(value) > condition_value:
+                    return False
+                elif operator == "keys_count_lt" and len(value) < condition_value:
+                    return False
+                # Skip other operators for dictionaries
+                continue
+                
+            # Only apply numeric comparisons to numeric values
+            if not isinstance(value, (int, float)) and operator in ["gt", "lt", "ge", "le"]:
+                continue
+                
+            # Standard operators for primitive types
+            if operator == "eq" and value == condition_value:
+                return False
+            elif operator == "ne" and value != condition_value:
+                return False
+            elif operator == "gt" and value > condition_value:
+                return False
+            elif operator == "lt" and value < condition_value:
+                return False
+            elif operator == "ge" and value >= condition_value:
+                return False
+            elif operator == "le" and value <= condition_value:
+                return False
+            # String-specific operators
+            elif isinstance(value, str):
+                if operator == "contains" and condition_value in value:
+                    return False
+                elif operator == "not_contains" and condition_value not in value:
+                    return False
+                elif operator == "starts_with" and value.startswith(condition_value):
+                    return False
+                elif operator == "ends_with" and value.endswith(condition_value):
+                    return False
+                elif operator == "matches" and re.search(condition_value, value):
+                    return False
+                elif operator == "length_eq" and len(value) == condition_value:
+                    return False
+                elif operator == "length_gt" and len(value) > condition_value:
+                    return False
+                elif operator == "length_lt" and len(value) < condition_value:
+                    return False
+        except (TypeError, ValueError):
+            # If comparison fails, we'll just continue
+            pass
+    
+    # If we've made it this far, the value passes all filters
+    return True
+
 def jsonfilter(data: Any, options: Dict[str, Any]) -> Any:
     """
     Filters a JSON object based on specified options.
@@ -264,6 +392,13 @@ def jsonfilter(data: Any, options: Dict[str, Any]) -> Any:
                 When used with filter_type="include", only the specified keys will be kept at any level.
                 When used with filter_type="exclude", the specified keys will be removed from all levels.
             - filter_type (str): Either "include" (default) or "exclude" to specify whether to include or exclude the matched paths.
+            - value_filters (Dict[str, Any]): Value-based filters to apply. Supported filters include:
+                - null_values (bool): If True, removes keys with null values.
+                - empty_strings (bool): If True, removes keys with empty string values.
+                - conditions (List[Dict]): List of conditions to filter values by. Each condition has:
+                    - key (str): The key to match (can be a specific key or "*" for all keys).
+                    - operator (str): One of "eq", "ne", "gt", "lt", "ge", "le".
+                    - value (Any): The value to compare against.
     
     Returns:
         Any: The filtered JSON data.
@@ -283,7 +418,9 @@ def jsonfilter(data: Any, options: Dict[str, Any]) -> Any:
     keys_list = options.get("keys", [])
     if keys_list and options["filter_type"] == "exclude":
         # Use recursive approach to exclude keys at all levels
-        return _recursive_exclude_keys(data, keys_list)
+        # Pass value_filters if they exist
+        value_filters = options.get("value_filters")
+        return _recursive_exclude_keys(data, keys_list, value_filters)
     
     # Handle different data types
     if isinstance(data, dict):
@@ -295,13 +432,14 @@ def jsonfilter(data: Any, options: Dict[str, Any]) -> Any:
         return data
 
 
-def _recursive_exclude_keys(data: Any, keys_to_exclude: List[str]) -> Any:
+def _recursive_exclude_keys(data: Any, keys_to_exclude: List[str], value_filters: Dict[str, Any] = None) -> Any:
     """
-    Recursively exclude keys from a JSON structure.
+    Recursively exclude keys from a JSON structure and apply value-based filtering.
     
     Args:
         data: The data to process
         keys_to_exclude: List of keys to exclude
+        value_filters: Optional dictionary of value-based filters to apply
         
     Returns:
         The filtered data
@@ -312,9 +450,13 @@ def _recursive_exclude_keys(data: Any, keys_to_exclude: List[str]) -> Any:
             if key in keys_to_exclude:
                 continue  # Skip this key
             
+            # Apply value-based filtering if provided
+            if value_filters and not _should_keep_value(key, value, value_filters):
+                continue  # Skip based on value filters
+            
             # Recursively process nested structures
             if isinstance(value, (dict, list)):
-                filtered_value = _recursive_exclude_keys(value, keys_to_exclude)
+                filtered_value = _recursive_exclude_keys(value, keys_to_exclude, value_filters)
                 result[key] = filtered_value
             else:
                 result[key] = value
@@ -322,11 +464,26 @@ def _recursive_exclude_keys(data: Any, keys_to_exclude: List[str]) -> Any:
     elif isinstance(data, list):
         result = []
         for item in data:
-            if isinstance(item, (dict, list)):
-                filtered_item = _recursive_exclude_keys(item, keys_to_exclude)
+            if isinstance(item, dict):
+                # For dictionaries in a list, check each key-value pair against value filters
+                skip_item = False
+                if value_filters:
+                    for key, value in item.items():
+                        if not _should_keep_value(key, value, value_filters):
+                            skip_item = True
+                            break
+                
+                if not skip_item:
+                    filtered_item = _recursive_exclude_keys(item, keys_to_exclude, value_filters)
+                    if filtered_item:  # Only add non-empty items
+                        result.append(filtered_item)
+            elif isinstance(item, list):
+                filtered_item = _recursive_exclude_keys(item, keys_to_exclude, value_filters)
                 if filtered_item:  # Only add non-empty items
                     result.append(filtered_item)
             else:
+                # For primitive values, we can't apply key-based value filters
+                # since there's no key, so we just include them
                 result.append(item)
         return result
     else:
@@ -369,14 +526,26 @@ def _filter_dict(data: Dict[str, Any], options: Dict[str, Any], current_path: st
     regex_pattern = options.get("regex")
     keys_list = options.get("keys", [])
     filter_type = options.get("filter_type", "include")
+    value_filters = options.get("value_filters", {})
     
     # If no filtering options provided, return the data as is
-    if not jsonpaths and not regex_pattern and not keys_list:
+    if not jsonpaths and not regex_pattern and not keys_list and not value_filters:
         return data
+    
+    # If only value filters are provided and no path/key filters, we need to apply value filters
+    # but keep the structure intact for keys that pass the filter
+    only_value_filters = bool(value_filters) and not (jsonpaths or regex_pattern or keys_list)
     
     for key, value in data.items():
         # Build the current JSON path
         key_path = f"{current_path}.{key}" if current_path else key
+        
+        # Apply value-based filtering for primitive values
+        value_filter_passed = _should_keep_value(key, value, value_filters)
+        
+        # If only using value filters and this is a primitive value that doesn't pass, skip it
+        if only_value_filters and not isinstance(value, (dict, list)) and not value_filter_passed:
+            continue
         
         # Check if this key or its children should be included/excluded
         path_matched = False
@@ -429,7 +598,8 @@ def _filter_dict(data: Dict[str, Any], options: Dict[str, Any], current_path: st
                     path_matched = True
         
         # Determine whether to include this key based on filter_type
-        include_key = (path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude")
+        # If we're only using value filters, include_key is always True
+        include_key = only_value_filters or (path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude")
         
         # Special handling for exclude with keys option
         if filter_type == "exclude" and keys_list and key in keys_list:
@@ -447,7 +617,9 @@ def _filter_dict(data: Dict[str, Any], options: Dict[str, Any], current_path: st
                 if filtered_list:  # Only add non-empty lists
                     result[key] = filtered_list
             else:
-                result[key] = value
+                # For primitive values, apply value filtering
+                if value_filter_passed:
+                    result[key] = value
         elif isinstance(value, dict):
             # Even if this key isn't included, check if any of its children should be
             filtered_dict = _filter_dict(value, options, key_path)
@@ -471,9 +643,14 @@ def _filter_list(data: List[Any], options: Dict[str, Any], current_path: str) ->
     regex_pattern = options.get("regex")
     keys_list = options.get("keys", [])
     filter_type = options.get("filter_type", "include")
+    value_filters = options.get("value_filters", {})
     
-    if not jsonpaths and not regex_pattern and not keys_list:
+    if not jsonpaths and not regex_pattern and not keys_list and not value_filters:
         return data
+    
+    # If only value filters are provided and no path/key filters, we need to apply value filters
+    # but keep the structure intact for items that pass the filter
+    only_value_filters = bool(value_filters) and not (jsonpaths or regex_pattern or keys_list)
     
     # Check if the entire list path is in the jsonpaths
     path_matched = current_path in jsonpaths
@@ -488,7 +665,8 @@ def _filter_list(data: List[Any], options: Dict[str, Any], current_path: str) ->
                     break
     
     # If the entire list matches and we're in include mode, or it doesn't match and we're in exclude mode, return the whole list
-    if (path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude"):
+    # But still apply value filters if they exist
+    if ((path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude")) and not value_filters:
         return data
     
     result = []
@@ -498,6 +676,18 @@ def _filter_list(data: List[Any], options: Dict[str, Any], current_path: str) ->
         
         # For dictionaries, we need to check if any of the keys should be excluded
         if isinstance(item, dict):
+            # Apply value-based filtering for dictionary items only if we're only using value filters
+            if only_value_filters:
+                # We'll check each key-value pair in the dictionary
+                skip_item = False
+                for key, value in item.items():
+                    if not _should_keep_value(key, value, value_filters):
+                        skip_item = True
+                        break
+                        
+                if skip_item:
+                    continue
+                
             # Special handling for exclude with keys option
             if filter_type == "exclude" and keys_list:
                 # Check if any key in the dictionary is in the exclude keys list
@@ -520,6 +710,13 @@ def _filter_list(data: List[Any], options: Dict[str, Any], current_path: str) ->
                 result.append(filtered_item)
         else:
             # For primitive types, check if the parent path is included
+            # and also apply value-based filtering
+            value_filter_passed = _should_keep_value(str(i), item, value_filters)
+            
+            # If only using value filters and this value doesn't pass, skip it
+            if only_value_filters and not value_filter_passed:
+                continue
+                
             path_matched = False
             
             for path in jsonpaths:
@@ -541,9 +738,9 @@ def _filter_list(data: List[Any], options: Dict[str, Any], current_path: str) ->
                         path_matched = True
             
             # Determine whether to include this item based on filter_type
-            include_item = (path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude")
+            include_item = only_value_filters or (path_matched and filter_type == "include") or (not path_matched and filter_type == "exclude")
             
-            if include_item:
+            if include_item and value_filter_passed:
                 result.append(item)
     
     return result
