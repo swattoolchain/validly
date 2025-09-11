@@ -598,6 +598,146 @@ filtered_data = jsonfilter(data, options)
 # }
 ```
 
+<a name="value-based-filtering-anchor"></a>
+#### **Value-based Filtering**
+
+Filter JSON data based on the values of fields:
+
+```python
+# Sample data with various value types
+data = {
+    "user": {
+        "id": 123,
+        "name": "John Doe",
+        "email": "john@example.com",
+        "age": 17,
+        "address": {
+            "street": "123 Main St",
+            "city": "Anytown",
+            "country": null
+        },
+        "phone": "",
+        "preferences": {
+            "notifications": True,
+            "language": null
+        }
+    },
+    "orders": [
+        {
+            "id": 1001,
+            "total": 99.99,
+            "shipping": null,
+            "notes": ""
+        },
+        {
+            "id": 1002,
+            "total": 149.99,
+            "shipping": 10.0,
+            "notes": "Express delivery"
+        }
+    ]
+}
+
+# Remove null values
+options = {
+    "value_filters": {
+        "null_values": True
+    }
+}
+
+filtered_data = jsonfilter(data, options)
+
+# Result will exclude all null values:
+# {
+#     "user": {
+#         "id": 123,
+#         "name": "John Doe",
+#         "email": "john@example.com",
+#         "age": 17,
+#         "address": {
+#             "street": "123 Main St",
+#             "city": "Anytown"
+#         },
+#         "phone": "",
+#         "preferences": {
+#             "notifications": true
+#         }
+#     },
+#     "orders": [
+#         {
+#             "id": 1001,
+#             "total": 99.99,
+#             "notes": ""
+#         },
+#         {
+#             "id": 1002,
+#             "total": 149.99,
+#             "shipping": 10.0,
+#             "notes": "Express delivery"
+#         }
+#     ]
+# }
+
+# Remove empty strings
+options = {
+    "value_filters": {
+        "empty_strings": True
+    }
+}
+
+filtered_data = jsonfilter(data, options)
+
+# Remove values based on conditions
+options = {
+    "value_filters": {
+        "conditions": [
+            {
+                "key": "age",
+                "operator": "lt",
+                "value": 18
+            }
+        ]
+    }
+}
+
+filtered_data = jsonfilter(data, options)
+
+# Combine multiple value filters
+options = {
+    "value_filters": {
+        "null_values": True,
+        "empty_strings": True,
+        "conditions": [
+            {
+                "key": "*",  # Apply to all keys
+                "operator": "lt",
+                "value": 10
+            }
+        ]
+    }
+}
+
+filtered_data = jsonfilter(data, options)
+
+# Combine with path-based filtering
+options = {
+    "jsonpath": ["user.name", "user.email"],
+    "value_filters": {
+        "null_values": True
+    }
+}
+
+filtered_data = jsonfilter(data, options)
+```
+
+Supported value filter operators:
+- `eq`: Equal to
+- `ne`: Not equal to
+- `gt`: Greater than
+- `lt`: Less than
+- `ge`: Greater than or equal to
+- `le`: Less than or equal to
+
 <a name="filtering-from-files-anchor"></a>
 #### **Filtering from Files**
 
